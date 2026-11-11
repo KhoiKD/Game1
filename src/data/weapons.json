@@ -1,0 +1,58 @@
+{
+  "archetypes": {
+    "pulse-rifle": {
+      "label": "Pulse Rifle", "trigger": "burst", "burstCount": 3, "burstIntervalMs": 60, "chargeMs": 0,
+      "fireIntervalMs": 330, "damage": 1.1, "pellets": 1, "spreadDeg": 0,
+      "projectileSpeed": 950, "range": 760, "stability": 75, "reloadMs": 1300, "magazine": 27, "handling": 60,
+      "pierce": 0, "gravity": 0, "blastRadius": 0, "projectile": "bullet"
+    },
+    "spread-gun": {
+      "label": "Spread Gun", "trigger": "auto", "burstCount": 1, "burstIntervalMs": 0, "chargeMs": 0,
+      "fireIntervalMs": 520, "damage": 1, "pellets": 6, "spreadDeg": 7,
+      "projectileSpeed": 800, "range": 380, "stability": 50, "reloadMs": 1500, "magazine": 6, "handling": 45,
+      "pierce": 0, "gravity": 0, "blastRadius": 0, "projectile": "pellet"
+    },
+    "beam": {
+      "label": "Beam", "trigger": "auto", "burstCount": 1, "burstIntervalMs": 0, "chargeMs": 0,
+      "fireIntervalMs": 45, "damage": 0.45, "pellets": 1, "spreadDeg": 0,
+      "projectileSpeed": 1500, "range": 560, "stability": 100, "reloadMs": 1500, "magazine": 80, "handling": 55,
+      "pierce": 0, "gravity": 0, "blastRadius": 0, "projectile": "beam"
+    },
+    "launcher": {
+      "label": "Launcher", "trigger": "semi", "burstCount": 1, "burstIntervalMs": 0, "chargeMs": 0,
+      "fireIntervalMs": 900, "damage": 6, "pellets": 1, "spreadDeg": 0,
+      "projectileSpeed": 620, "range": 1500, "stability": 85, "reloadMs": 1900, "magazine": 3, "handling": 25,
+      "pierce": 0, "gravity": 0.55, "blastRadius": 80, "projectile": "grenade"
+    },
+    "sidearm": {
+      "label": "Sidearm", "trigger": "semi", "burstCount": 1, "burstIntervalMs": 0, "chargeMs": 0,
+      "fireIntervalMs": 160, "damage": 1.6, "pellets": 1, "spreadDeg": 0,
+      "projectileSpeed": 900, "range": 620, "stability": 85, "reloadMs": 800, "magazine": 10, "handling": 95,
+      "pierce": 0, "gravity": 0, "blastRadius": 0, "projectile": "bullet"
+    },
+    "melee-burst": {
+      "label": "Melee Burst", "trigger": "auto", "burstCount": 1, "burstIntervalMs": 0, "chargeMs": 0,
+      "fireIntervalMs": 380, "damage": 1.2, "pellets": 5, "spreadDeg": 16,
+      "projectileSpeed": 520, "range": 96, "stability": 100, "reloadMs": 1000, "magazine": 5, "handling": 80,
+      "pierce": 99, "gravity": 0, "blastRadius": 0, "projectile": "slash"
+    },
+    "charge-cannon": {
+      "label": "Charge Cannon", "trigger": "charge", "burstCount": 1, "burstIntervalMs": 0, "chargeMs": 800,
+      "fireIntervalMs": 250, "damage": 10, "pellets": 1, "spreadDeg": 0,
+      "projectileSpeed": 1300, "range": 1100, "stability": 100, "reloadMs": 1600, "magazine": 4, "handling": 35,
+      "pierce": 99, "gravity": 0, "blastRadius": 0, "projectile": "charge-shot"
+    }
+  },
+  "weapons": [
+    { "id": "field-carbine", "name": "Field Carbine", "archetype": "pulse-rifle", "element": "kinetic", "rarity": "common" },
+    { "id": "pocket-sting", "name": "Pocket Sting", "archetype": "sidearm", "element": "kinetic", "rarity": "common" },
+    { "id": "scattermaw", "name": "Scattermaw", "archetype": "spread-gun", "element": "kinetic", "rarity": "common" },
+    { "id": "volt-lance", "name": "Volt Lance", "archetype": "beam", "element": "Volt", "rarity": "uncommon" },
+    { "id": "cinder-lobber", "name": "Cinder Lobber", "archetype": "launcher", "element": "Ember", "rarity": "uncommon" },
+    { "id": "brush-cutter", "name": "Brush Cutter", "archetype": "melee-burst", "element": "Verdant", "rarity": "uncommon" },
+    { "id": "longwake", "name": "Longwake", "archetype": "charge-cannon", "element": "Tide", "rarity": "rare" }
+  ],
+  "starterLoadout": [
+    "field-carbine", "pocket-sting", "scattermaw", "volt-lance", "cinder-lobber", "brush-cutter", "longwake"
+  ]
+}

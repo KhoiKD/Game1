@@ -29,6 +29,25 @@ export class BootScene extends Phaser.Scene {
       g.fillStyle(0xffd166).fillRect(0, 0, 10, 4);
     });
 
+    // Projectiles, one per weapon archetype family (see "projectile" in weapons.json).
+    this.makeTexture('pellet', 6, 6, (g) => {
+      g.fillStyle(0xffb347).fillCircle(3, 3, 3);
+    });
+    this.makeTexture('beam', 26, 3, (g) => {
+      g.fillStyle(0xfff275).fillRect(0, 0, 26, 3);
+    });
+    this.makeTexture('grenade', 12, 12, (g) => {
+      g.fillStyle(0xe4572e).fillCircle(6, 6, 6);
+      g.fillStyle(0xffd166).fillCircle(6, 6, 2);
+    });
+    this.makeTexture('slash', 12, 28, (g) => {
+      g.fillStyle(0x7ef7a3).fillTriangle(0, 0, 12, 14, 0, 28);
+    });
+    this.makeTexture('charge-shot', 30, 12, (g) => {
+      g.fillStyle(0x4cc9f0).fillRect(0, 0, 30, 12);
+      g.fillStyle(0xe0fbff).fillRect(8, 3, 22, 6);
+    });
+
     this.makeTexture('reticle', 24, 24, (g) => {
       g.lineStyle(2, 0xffffff, 0.9);
       g.strokeCircle(12, 12, 8);

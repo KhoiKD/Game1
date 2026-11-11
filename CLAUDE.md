@@ -70,6 +70,10 @@ Rules:
 - **Elements:** each weapon has an element or is kinetic.
 - **Stats:** damage, fire rate, range, stability, reload, magazine size, handling.
 - Weapons defined in `data/weapons.json`; perks in `data/perks.json`.
+- `weapons.json` layout: `archetypes` hold every stat; each entry in `weapons` names an archetype and may override any stat under `stats`. The file is validated at load (`data/weaponData.ts`), so bad data throws with the offending weapon and field.
+- Trigger modes: `auto` (hold), `semi` (one shot per click), `burst` (hold for repeated bursts), `charge` (hold, release when full; releasing early cancels).
+- Stat effects: stability sets random scatter, handling sets the delay after a swap, range and projectile speed set how long a shot lives, `pierce` passes through extra enemies, `gravity` arcs the shot, `blastRadius` explodes on impact.
+- A new weapon needs only a `weapons` entry. A new projectile look needs a texture in `BootScene` and its key in `projectile`.
 
 ## Creatures (Pokémon-style lore, original IP)
 - **Roster:** 150 creatures = 50 evolution families x 3 stages, each based on a real animal, plant, or fungus. Source of truth: `src/data/creatures.json` (families, inspiration species, elements, role, rarity, ability, evolution levels, stage names). Do not rename or reorder entries without asking; dex numbers derive from file order.
@@ -118,7 +122,7 @@ Rules:
 1. (done) Player movement, jump, mouse aiming, shoot, flat test level, placeholder art.
 2. (done) Tiled tilemap level, scrolling camera, checkpoints (activation, respawn, persisted resume). Death rollback currently covers pickups; items, weapon advancements, and spirits join `systems/runState.ts` as they are built.
 3. (done) Enemy base class, health, hit detection, one stage boss. Player has 5 HP with i-frames; walker and turret enemies; two-phase boss (Komodrake) with telegraphed volleys. Defeating the boss clears the stage and banks all progress. Enemy and boss stats live in `src/data/enemies.json`. Boss capture comes with milestone 7.
-4. Weapon data model and archetypes loaded from JSON.
+4. (done) Weapon data model and archetypes loaded from JSON. All seven archetypes are playable; firing logic is a pure state machine in `systems/weapon.ts`. Until loot exists, the player carries the `starterLoadout` from `weapons.json` (one weapon per archetype). Elements are labels only until milestone 6.
 5. Loot drops, inventory UI, perk rolling (with Vitest coverage).
 6. Element system and status effects.
 7. Spirit capture, equipped-spirit perks and abilities, evolution, stat balancing formula and simulation test.
@@ -137,6 +141,7 @@ Rules:
 - `window.__tamerunner` exposes the Phaser game for console debugging and headless smoke tests.
 - Save data is versioned (`SAVE_VERSION` in `systems/save.ts`). Changing its shape means bumping the version and adding a migration case.
 - Dev shortcut: F9 clears the save and restarts the level.
+- Read one-shot key presses (swap, reload) from `keydown-<KEY>` events, not `JustDown` polling, which misses taps shorter than a frame.
 
 ## Art Direction
 - **Look:** "pixel-grid vector." Sprites read as 32px-scale pixel art (chunky silhouettes, limited palette per sprite, hard-edged shapes snapped to a 32px grid) but carry vector-level detail: crisp anti-aliased edges, smooth gradients and rim lighting, fine line details, subtle glow on elemental effects.

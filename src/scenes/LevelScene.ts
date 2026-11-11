@@ -3,14 +3,14 @@ import {
   ENEMY_ACTIVE_RANGE,
   ENEMY_BULLET_DAMAGE,
   ENEMY_BULLET_LIFETIME_MS,
-  FIRE_INTERVAL_MS,
   GAME_HEIGHT,
   GAME_WIDTH,
-  PLAYER_BULLET_DAMAGE,
+  MUZZLE_OFFSET,
   PLAYER_IFRAMES_MS,
   PLAYER_MAX_HP,
 } from '../config';
 import { getBossStats, getEnemyStats } from '../data/enemyData';
+import { starterLoadout, type ResolvedWeapon } from '../data/weaponData';
 import { Boss } from '../entities/Boss';
 import { Bullet } from '../entities/Bullet';
 import { Enemy, type EnemyContext } from '../entities/Enemy';
@@ -39,7 +39,18 @@ import {
   type RunState,
 } from '../systems/runState';
 import { clearSave, getStorage, loadSave, restoreRun, serializeRun, writeSave } from '../systems/save';
-import { aimVector, type Vec2 } from '../util/aim';
+import {
+  chargeFraction,
+  createWeaponState,
+  draw,
+  holster,
+  isReloading,
+  stepWeapon,
+  type Shot,
+  type WeaponState,
+} from '../systems/weapon';
+import { aimAngle, type Vec2 } from '../util/aim';
+import { createRng, type Rng } from '../util/rng';
 
 const LEVEL_ID = 'level1';
 const FALL_MARGIN = 96; // how far below the map the player may fall before dying
@@ -62,7 +73,15 @@ export class LevelScene extends Phaser.Scene {
   private run!: RunState;
   private health!: Health;
   private mapHeightPx = 0;
-  private nextShotAt = 0;
+  private weapons: ResolvedWeapon[] = [];
+  private weaponStates: WeaponState[] = [];
+  private weaponIndex = 0;
+  private weaponHud!: Phaser.GameObjects.Text;
+  private weaponHudText = '';
+  /** Swap and reload presses queued by key events, consumed once per frame. */
+  private pendingSwap = 0;
+  private pendingReload = false;
+  private rng: Rng = createRng(1);
   private deathPending = false;
   private readonly pickupSprites = new Map<string, Phaser.GameObjects.Image>();
   private readonly checkpointSprites = new Map<string, Phaser.GameObjects.Image>();
@@ -77,8 +96,15 @@ export class LevelScene extends Phaser.Scene {
     this.checkpointSprites.clear();
     this.toastText = undefined;
     this.boss = null;
-    this.nextShotAt = 0;
     this.deathPending = false;
+    // Until loot exists (milestone 5), the player carries one weapon of every archetype.
+    this.weapons = starterLoadout();
+    this.weaponStates = this.weapons.map(createWeaponState);
+    this.weaponIndex = 0;
+    this.weaponHudText = '';
+    this.pendingSwap = 0;
+    this.pendingReload = false;
+    this.rng = createRng(Date.now());
 
     const map = this.make.tilemap({ key: 'level1' });
     const tileset = map.addTilesetImage('tiles', 'tiles');
@@ -111,7 +137,7 @@ export class LevelScene extends Phaser.Scene {
       classType: Bullet,
       runChildUpdate: true,
       allowGravity: false,
-      maxSize: 64,
+      maxSize: 128,
     });
     this.enemyBullets = this.physics.add.group({
       classType: Bullet,
@@ -128,7 +154,12 @@ export class LevelScene extends Phaser.Scene {
       if (a instanceof Bullet) a.kill();
       else if (b instanceof Bullet) b.kill();
     };
-    this.physics.add.collider(this.bullets, ground, killBullet);
+    this.physics.add.collider(this.bullets, ground, (a, b) => {
+      const bullet = a instanceof Bullet ? a : b instanceof Bullet ? b : null;
+      if (!bullet?.active) return;
+      if (bullet.blastRadius > 0) this.explode(bullet);
+      bullet.kill();
+    });
     this.physics.add.collider(this.enemyBullets, ground, killBullet);
     this.physics.add.collider(this.enemies, ground);
     this.physics.add.overlap(this.bullets, this.enemies, (a, b) => this.onBulletHitsEnemy(a, b));
@@ -149,6 +180,18 @@ export class LevelScene extends Phaser.Scene {
     this.input.setDefaultCursor('none');
     this.input.mouse?.disableContextMenu();
     this.reticle = this.add.image(0, 0, 'reticle').setScrollFactor(0).setDepth(100);
+
+    const keyboard = this.input.keyboard;
+    if (!keyboard) throw new Error('Keyboard input is unavailable');
+    // Key events rather than polling: a tap shorter than one frame still counts.
+    const onPress = (key: string, action: () => void): void => {
+      keyboard.on(`keydown-${key}`, (event: KeyboardEvent) => {
+        if (!event.repeat) action();
+      });
+    };
+    onPress('E', () => (this.pendingSwap += 1));
+    onPress('Q', () => (this.pendingSwap -= 1));
+    onPress('R', () => (this.pendingReload = true));
 
     this.buildHud();
 
@@ -175,10 +218,7 @@ export class LevelScene extends Phaser.Scene {
     // Blink while invulnerable so the i-frames are readable.
     this.player.setAlpha(isInvulnerable(this.health, time) && Math.floor(time / 80) % 2 === 0 ? 0.35 : 1);
 
-    if (pointer.leftButtonDown() && time >= this.nextShotAt) {
-      this.nextShotAt = time + FIRE_INTERVAL_MS;
-      this.fire(target);
-    }
+    this.tickWeapon(time, pointer.leftButtonDown(), target);
 
     this.tickEnemies(time);
     this.checkCheckpoints();
@@ -296,15 +336,38 @@ export class LevelScene extends Phaser.Scene {
 
   private fireEnemyBullet(from: Vec2, dir: Vec2, speed: number): void {
     const bullet = this.enemyBullets.get(from.x, from.y) as Bullet | null;
-    bullet?.fire(from.x, from.y, dir, speed, ENEMY_BULLET_LIFETIME_MS);
+    bullet?.fire(from.x, from.y, dir, { speed, lifetimeMs: ENEMY_BULLET_LIFETIME_MS });
   }
 
   private onBulletHitsEnemy(a: unknown, b: unknown): void {
     const bullet = a instanceof Bullet ? a : b instanceof Bullet ? b : null;
     const enemy = a instanceof Enemy ? a : b instanceof Enemy ? b : null;
     if (!bullet || !enemy || !bullet.active || !enemy.active) return;
-    bullet.kill();
-    if (enemy.takeDamage(PLAYER_BULLET_DAMAGE, this.time.now)) this.defeat(enemy);
+    // A piercing shot overlaps the same enemy for several frames; hit it once.
+    if (!bullet.registerHit(enemy.enemyId)) return;
+    if (bullet.blastRadius > 0) {
+      this.explode(bullet);
+      bullet.kill();
+      return;
+    }
+    if (!bullet.consumePierce()) bullet.kill();
+    if (enemy.takeDamage(bullet.damage, this.time.now)) this.defeat(enemy);
+  }
+
+  /** Damages every enemy within the projectile's blast radius. */
+  private explode(bullet: Bullet): void {
+    const { x, y, blastRadius, damage } = bullet;
+    // Copy the list: defeated enemies are removed from the group while we loop.
+    for (const child of [...this.enemies.getChildren()]) {
+      const enemy = child as Enemy;
+      if (!enemy.active) continue;
+      const reach = blastRadius + Math.max(enemy.width, enemy.height) / 2;
+      if (Math.hypot(enemy.x - x, enemy.y - y) > reach) continue;
+      if (enemy.takeDamage(damage, this.time.now)) this.defeat(enemy);
+    }
+    const flash = this.add.graphics().setDepth(4);
+    flash.fillStyle(0xffb347, 0.55).fillCircle(x, y, blastRadius);
+    this.tweens.add({ targets: flash, alpha: 0, duration: 180, onComplete: () => flash.destroy() });
   }
 
   private defeat(enemy: Enemy): void {
@@ -337,6 +400,7 @@ export class LevelScene extends Phaser.Scene {
     const lost = unsecuredCount(this.run);
     this.run = die(this.run);
     this.health = refill(this.health);
+    this.weaponStates = this.weapons.map(createWeaponState);
     this.syncPickups();
     this.killAll(this.bullets);
     this.killAll(this.enemyBullets);
@@ -362,24 +426,77 @@ export class LevelScene extends Phaser.Scene {
 
   // ---- shooting, HUD -----------------------------------------------------
 
-  private fire(target: { x: number; y: number }): void {
-    const origin = this.player.weaponPivot;
-    const dir = aimVector(origin, target);
-    const x = origin.x + dir.x * 22;
-    const y = origin.y + dir.y * 22;
+  private tickWeapon(time: number, triggerDown: boolean, target: Vec2): void {
+    while (this.pendingSwap !== 0) {
+      const direction = this.pendingSwap > 0 ? 1 : -1;
+      this.swapWeapon(direction, time);
+      this.pendingSwap -= direction;
+    }
+    const reloadPressed = this.pendingReload;
+    this.pendingReload = false;
+
+    const weapon = this.weapons[this.weaponIndex]!;
+    const step = stepWeapon(
+      this.weaponStates[this.weaponIndex]!,
+      weapon,
+      { time, triggerDown, reloadPressed },
+      this.rng,
+    );
+    this.weaponStates[this.weaponIndex] = step.state;
+    if (step.shots.length > 0) {
+      const origin = this.player.weaponPivot;
+      const aim = aimAngle(origin, target);
+      for (const shot of step.shots) this.spawnShot(origin, aim, shot);
+    }
+    this.refreshWeaponHud(time);
+  }
+
+  private swapWeapon(direction: 1 | -1, time: number): void {
+    const count = this.weapons.length;
+    if (count < 2) return;
+    this.weaponStates[this.weaponIndex] = holster(this.weaponStates[this.weaponIndex]!);
+    this.weaponIndex = (this.weaponIndex + direction + count) % count;
+    this.weaponStates[this.weaponIndex] = draw(
+      this.weaponStates[this.weaponIndex]!,
+      this.weapons[this.weaponIndex]!,
+      time,
+    );
+  }
+
+  private spawnShot(origin: Vec2, aim: number, shot: Shot): void {
+    const angle = aim + shot.angleOffset;
+    const dir = { x: Math.cos(angle), y: Math.sin(angle) };
+    const x = origin.x + dir.x * MUZZLE_OFFSET;
+    const y = origin.y + dir.y * MUZZLE_OFFSET;
     const bullet = this.bullets.get(x, y) as Bullet | null;
-    bullet?.fire(x, y, dir);
+    bullet?.fire(x, y, dir, shot);
+  }
+
+  private refreshWeaponHud(time: number): void {
+    const weapon = this.weapons[this.weaponIndex]!;
+    const state = this.weaponStates[this.weaponIndex]!;
+    let status = `${state.ammo}/${weapon.magazine}`;
+    if (isReloading(state)) status = 'RELOADING';
+    else if (state.chargeStartedAt !== null) {
+      const charge = chargeFraction(state, weapon, time);
+      status += charge >= 1 ? '  CHARGED · release to fire' : `  charging ${Math.round(charge * 100)}%`;
+    }
+    const text = `${this.weaponIndex + 1}/${this.weapons.length}  ${weapon.name} · ${weapon.archetypeLabel} · ${weapon.element}   ${status}`;
+    if (text === this.weaponHudText) return;
+    this.weaponHudText = text;
+    this.weaponHud.setText(text).setColor(isReloading(state) ? '#ffd166' : '#e6ebf5');
   }
 
   private buildHud(): void {
     const style = { fontFamily: 'monospace', fontSize: '14px', color: '#9aa4bf' };
     this.add
-      .text(16, 12, 'A/D move · Space jump · Mouse aim · Left click fire · F9 reset save', style)
+      .text(16, 12, 'A/D move · Space jump · Mouse aim · Click fire · R reload · Q/E swap weapon · F9 reset save', style)
       .setScrollFactor(0)
       .setDepth(100);
     this.hud = this.add.text(16, 34, '', style).setScrollFactor(0).setDepth(100);
     this.add.text(16, 56, 'HP', style).setScrollFactor(0).setDepth(100);
     this.healthPips = this.add.graphics().setScrollFactor(0).setDepth(100);
+    this.weaponHud = this.add.text(16, 78, '', { ...style, color: '#e6ebf5' }).setScrollFactor(0).setDepth(100);
     this.bossBar = this.add.graphics().setScrollFactor(0).setDepth(100);
     this.bossLabel = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT - 46, '', { ...style, color: '#ffffff' })
