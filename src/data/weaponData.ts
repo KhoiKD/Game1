@@ -9,7 +9,7 @@ export const ARCHETYPE_IDS = [
   'melee-burst',
   'charge-cannon',
 ] as const;
-export const TRIGGER_MODES = ['auto', 'semi', 'burst', 'charge'] as const;
+export const TRIGGER_MODES = ['auto', 'semi', 'burst', 'semi-burst', 'charge'] as const;
 export const WEAPON_ELEMENTS = ['kinetic', 'Ember', 'Tide', 'Volt', 'Verdant', 'Umbra', 'Gale'] as const;
 export const RARITIES = ['common', 'uncommon', 'rare', 'epic', 'legendary'] as const;
 
@@ -22,7 +22,10 @@ export type Rarity = (typeof RARITIES)[number];
  * a weapon may override any of them under its "stats" key.
  */
 export interface WeaponStats {
-  /** auto: hold to fire. semi: one shot per click. burst: hold for repeated bursts. charge: hold, then release. */
+  /**
+   * auto: hold to fire. semi: one shot per click. burst: hold for repeated bursts.
+   * semi-burst: one full burst per click. charge: hold, then release.
+   */
   trigger: TriggerMode;
   /** Minimum time between trigger pulls (fire rate). */
   fireIntervalMs: number;
@@ -108,7 +111,8 @@ function checkStats(stats: WeaponStats, where: string): void {
   for (const key of ['stability', 'handling'] as const) {
     if (stats[key] > 100) fail(`"${key}" must be between 0 and 100`);
   }
-  if (stats.trigger === 'burst' && stats.burstCount < 2) fail('a burst weapon needs burstCount >= 2');
+  const isBurst = stats.trigger === 'burst' || stats.trigger === 'semi-burst';
+  if (isBurst && stats.burstCount < 2) fail('a burst weapon needs burstCount >= 2');
   if (stats.trigger === 'charge' && stats.chargeMs <= 0) fail('a charge weapon needs chargeMs > 0');
 }
 

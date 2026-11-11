@@ -71,7 +71,7 @@ Rules:
 - **Stats:** damage, fire rate, range, stability, reload, magazine size, handling.
 - Weapons defined in `data/weapons.json`; perks in `data/perks.json`.
 - `weapons.json` layout: `archetypes` hold every stat; each entry in `weapons` names an archetype and may override any stat under `stats`. The file is validated at load (`data/weaponData.ts`), so bad data throws with the offending weapon and field.
-- Trigger modes: `auto` (hold), `semi` (one shot per click), `burst` (hold for repeated bursts), `charge` (hold, release when full; releasing early cancels).
+- Trigger modes: `auto` (hold), `semi` (one shot per click), `burst` (hold for repeated bursts), `semi-burst` (one full burst per click; the Field Carbine uses this), `charge` (hold, release when full; releasing early cancels).
 - Stat effects: stability sets random scatter, handling sets the delay after a swap, range and projectile speed set how long a shot lives, `pierce` passes through extra enemies, `gravity` arcs the shot, `blastRadius` explodes on impact.
 - A new weapon needs only a `weapons` entry. A new projectile look needs a texture in `BootScene` and its key in `projectile`.
 

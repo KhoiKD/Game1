@@ -62,7 +62,7 @@ describe('weapon data', () => {
   it('resolves a weapon from its archetype', () => {
     const carbine = getWeapon('field-carbine');
     expect(carbine.archetypeLabel).toBe('Pulse Rifle');
-    expect(carbine.trigger).toBe('burst');
+    expect(carbine.trigger).toBe('semi-burst');
     expect(carbine.magazine).toBe(weaponData.archetypes['pulse-rifle']!.magazine);
   });
 
@@ -153,13 +153,30 @@ describe('trigger modes', () => {
     expect(tooFast.shotTimes).toEqual([0]);
   });
 
-  it('burst fires its full burst from one pull, then waits for the fire interval', () => {
-    const w = getWeapon('field-carbine');
+  it('burst fires its full burst from one pull and repeats while held', () => {
+    const w: ResolvedWeapon = { ...getWeapon('field-carbine'), trigger: 'burst' };
     const tap = simulate(w, (t) => t === 0, 300);
     expect(tap.shotTimes).toEqual([0, 60, 120]);
     expect(tap.state.ammo).toBe(w.magazine - 3);
     const held = simulate(w, () => true, 500);
     expect(held.shotTimes).toEqual([0, 60, 120, 330, 390, 450]);
+  });
+
+  it('semi-burst fires one full burst per click, even when the click is short or held', () => {
+    const w = getWeapon('field-carbine');
+    expect(w.trigger).toBe('semi-burst');
+    const tap = simulate(w, (t) => t === 0, 1000);
+    expect(tap.shotTimes).toEqual([0, 60, 120]);
+    const held = simulate(w, () => true, 1000);
+    expect(held.shotTimes).toEqual([0, 60, 120]);
+    const twoClicks = simulate(w, (t) => t < 30 || (t >= 400 && t < 430), 1000);
+    expect(twoClicks.shotTimes).toEqual([0, 60, 120, 400, 460, 520]);
+  });
+
+  it('semi-burst ignores a click made before the previous burst has cooled down', () => {
+    const w = getWeapon('field-carbine');
+    const tooFast = simulate(w, (t) => t < 30 || (t >= 200 && t < 230), 1000);
+    expect(tooFast.shotTimes).toEqual([0, 60, 120]);
   });
 
   it('charge fires on release only when fully charged', () => {

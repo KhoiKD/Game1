@@ -171,7 +171,9 @@ export function stepWeapon(state: WeaponState, weapon: ResolvedWeapon, input: We
       }
       break;
     case 'burst':
-      if (triggerDown) {
+    case 'semi-burst':
+      // burst repeats while held; semi-burst needs a fresh click for each burst.
+      if (weapon.trigger === 'burst' ? triggerDown : pressed) {
         s.readyAt = time + weapon.fireIntervalMs;
         s.burstLeft = Math.min(weapon.burstCount, s.ammo) - 1;
         s.nextBurstAt = time + weapon.burstIntervalMs;

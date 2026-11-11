@@ -44,7 +44,7 @@
     }
   },
   "weapons": [
-    { "id": "field-carbine", "name": "Field Carbine", "archetype": "pulse-rifle", "element": "kinetic", "rarity": "common" },
+    { "id": "field-carbine", "name": "Field Carbine", "archetype": "pulse-rifle", "element": "kinetic", "rarity": "common", "stats": { "trigger": "semi-burst" } },
     { "id": "pocket-sting", "name": "Pocket Sting", "archetype": "sidearm", "element": "kinetic", "rarity": "common" },
     { "id": "scattermaw", "name": "Scattermaw", "archetype": "spread-gun", "element": "kinetic", "rarity": "common" },
     { "id": "volt-lance", "name": "Volt Lance", "archetype": "beam", "element": "Volt", "rarity": "uncommon" },
