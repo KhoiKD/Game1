@@ -1,0 +1,38 @@
+{
+  "enemies": {
+    "walker": {
+      "behavior": "walker",
+      "hp": 3,
+      "contactDamage": 1,
+      "speed": 70,
+      "patrolRange": 96
+    },
+    "turret": {
+      "behavior": "turret",
+      "hp": 4,
+      "contactDamage": 1,
+      "range": 520,
+      "telegraphMs": 450,
+      "fireIntervalMs": 1800,
+      "bulletSpeed": 300
+    }
+  },
+  "bosses": {
+    "komodrake": {
+      "name": "Komodrake",
+      "family": "ember-komodo",
+      "hp": 120,
+      "contactDamage": 1,
+      "activateRange": 560,
+      "telegraphMs": 600,
+      "bulletSpeed": 340,
+      "hopSpeedX": 200,
+      "hopSpeedY": 560,
+      "leash": 320,
+      "phases": [
+        { "untilHpFraction": 0.5, "bullets": 3, "spreadDeg": 10, "cooldownMs": 1500, "hop": false },
+        { "untilHpFraction": 0, "bullets": 5, "spreadDeg": 12, "cooldownMs": 1100, "hop": true }
+      ]
+    }
+  }
+}

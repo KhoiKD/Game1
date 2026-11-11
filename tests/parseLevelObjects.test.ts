@@ -58,6 +58,39 @@ describe('parseLevelObjects', () => {
   });
 });
 
+describe('enemies and bosses', () => {
+  const kind = (value: unknown) => [{ name: 'kind', value }];
+
+  it('parses enemies and bosses with their kind', () => {
+    const level = parseLevelObjects([
+      spawn,
+      { name: 'enemy-01', type: 'enemy', x: 528, y: 480, properties: kind('walker') },
+      { name: 'boss-01', type: 'boss', x: 5392, y: 480, properties: kind('komodrake') },
+    ]);
+    expect(level.enemies).toEqual([
+      { id: 'enemy-01', kind: 'walker', x: 528, y: 480, boss: false },
+      { id: 'boss-01', kind: 'komodrake', x: 5392, y: 480, boss: true },
+    ]);
+  });
+
+  it('throws when the kind is missing or not a string', () => {
+    expect(() => parseLevelObjects([spawn, { name: 'e', type: 'enemy', x: 0, y: 0 }])).toThrow(/kind/);
+    expect(() =>
+      parseLevelObjects([spawn, { name: 'b', type: 'boss', x: 0, y: 0, properties: kind(7) }]),
+    ).toThrow(/kind/);
+  });
+
+  it('requires unique names across object types', () => {
+    expect(() =>
+      parseLevelObjects([
+        spawn,
+        { name: 'same', type: 'pickup', x: 0, y: 0 },
+        { name: 'same', type: 'enemy', x: 0, y: 0, properties: kind('walker') },
+      ]),
+    ).toThrow(/Duplicate/);
+  });
+});
+
 describe('checkpointTriggerZone', () => {
   const flag = { x: 1152, y: 384, width: 32, height: 96 };
 

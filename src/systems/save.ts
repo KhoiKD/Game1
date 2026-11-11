@@ -1,15 +1,17 @@
 import type { RunState } from './runState';
 
 export const SAVE_KEY = 'tamerunner.save';
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
-/** What persists between page loads: the run as it stood at the last checkpoint. */
+/** What persists between page loads: the run as it stood when last secured. */
 export interface SaveData {
   version: number;
   levelId: string;
   checkpointId: string;
   checkpointOrder: number;
   secured: string[];
+  /** Enemy ids whose defeat is banked (added in version 2). */
+  defeated: string[];
 }
 
 /** Returns null before the first checkpoint: there is nothing to resume yet. */
@@ -21,6 +23,7 @@ export function serializeRun(levelId: string, run: RunState): SaveData | null {
     checkpointId: run.checkpointId,
     checkpointOrder: run.checkpointOrder,
     secured: [...run.secured],
+    defeated: [...run.securedDefeated],
   };
 }
 
@@ -30,6 +33,8 @@ export function restoreRun(save: SaveData): RunState {
     checkpointOrder: save.checkpointOrder,
     secured: [...save.secured],
     unsecured: [],
+    securedDefeated: [...save.defeated],
+    unsecuredDefeated: [],
   };
 }
 
@@ -42,21 +47,45 @@ export function migrateSave(data: unknown): SaveData | null {
   const d = data as Record<string, unknown>;
   switch (d.version) {
     case 1:
-      return isSaveV1(d) ? d : null;
+      // v1 had no enemies, so nothing was defeated.
+      return hasBaseFields(d) ? toSaveData(d, []) : null;
+    case 2:
+      return hasBaseFields(d) && isStringArray(d.defeated) ? toSaveData(d, d.defeated) : null;
     default:
       return null;
   }
 }
 
-function isSaveV1(d: Record<string, unknown>): d is Record<string, unknown> & SaveData {
+interface BaseFields {
+  levelId: string;
+  checkpointId: string;
+  checkpointOrder: number;
+  secured: string[];
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function hasBaseFields(d: Record<string, unknown>): d is Record<string, unknown> & BaseFields {
   return (
     typeof d.levelId === 'string' &&
     typeof d.checkpointId === 'string' &&
     typeof d.checkpointOrder === 'number' &&
     Number.isFinite(d.checkpointOrder) &&
-    Array.isArray(d.secured) &&
-    d.secured.every((id) => typeof id === 'string')
+    isStringArray(d.secured)
   );
+}
+
+function toSaveData(d: BaseFields, defeated: string[]): SaveData {
+  return {
+    version: SAVE_VERSION,
+    levelId: d.levelId,
+    checkpointId: d.checkpointId,
+    checkpointOrder: d.checkpointOrder,
+    secured: [...d.secured],
+    defeated: [...defeated],
+  };
 }
 
 export function parseSave(raw: string | null): SaveData | null {

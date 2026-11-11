@@ -6,7 +6,11 @@
  *   checkpoint  rectangle standing on the floor; custom int property "order"
  *               (1, 2, 3, ... in the order the player should reach them)
  *   pickup      point; x, y = centre of the pickup
- * Each checkpoint and pickup needs a unique name; it is used as its id.
+ *   enemy       point; x, y = surface the enemy stands on; custom string
+ *               property "kind" (a key under "enemies" in src/data/enemies.json)
+ *   boss        point; x, y = floor surface; custom string property "kind"
+ *               (a key under "bosses" in src/data/enemies.json)
+ * Each checkpoint, pickup, enemy, and boss needs a unique name; it is used as its id.
  */
 export interface RawObject {
   name?: string;
@@ -37,16 +41,26 @@ export interface PickupDef {
   y: number;
 }
 
+export interface EnemyDef {
+  id: string;
+  kind: string;
+  x: number;
+  y: number;
+  boss: boolean;
+}
+
 export interface LevelObjects {
   spawn: { x: number; y: number };
   checkpoints: CheckpointDef[];
   pickups: PickupDef[];
+  enemies: EnemyDef[];
 }
 
 export function parseLevelObjects(objects: readonly RawObject[]): LevelObjects {
   let spawn: LevelObjects['spawn'] | null = null;
   const checkpoints: CheckpointDef[] = [];
   const pickups: PickupDef[] = [];
+  const enemies: EnemyDef[] = [];
   const seen = new Set<string>();
 
   const claimId = (obj: RawObject): string => {
@@ -56,6 +70,8 @@ export function parseLevelObjects(objects: readonly RawObject[]): LevelObjects {
     seen.add(id);
     return id;
   };
+  const property = (obj: RawObject, name: string): unknown =>
+    obj.properties?.find((p) => p.name === name)?.value;
 
   for (const obj of objects) {
     switch (obj.type) {
@@ -65,7 +81,7 @@ export function parseLevelObjects(objects: readonly RawObject[]): LevelObjects {
         break;
       case 'checkpoint': {
         const id = claimId(obj);
-        const order = obj.properties?.find((p) => p.name === 'order')?.value;
+        const order = property(obj, 'order');
         if (typeof order !== 'number') throw new Error(`Checkpoint "${id}" needs an int property "order"`);
         checkpoints.push({
           id,
@@ -77,6 +93,16 @@ export function parseLevelObjects(objects: readonly RawObject[]): LevelObjects {
       case 'pickup':
         pickups.push({ id: claimId(obj), x: obj.x, y: obj.y });
         break;
+      case 'enemy':
+      case 'boss': {
+        const id = claimId(obj);
+        const kind = property(obj, 'kind');
+        if (typeof kind !== 'string' || kind === '') {
+          throw new Error(`${obj.type === 'boss' ? 'Boss' : 'Enemy'} "${id}" needs a string property "kind"`);
+        }
+        enemies.push({ id, kind, x: obj.x, y: obj.y, boss: obj.type === 'boss' });
+        break;
+      }
       default:
         break; // unknown types are ignored so the map can carry editor-only objects
     }
@@ -84,7 +110,7 @@ export function parseLevelObjects(objects: readonly RawObject[]): LevelObjects {
 
   if (!spawn) throw new Error('Level has no spawn object');
   checkpoints.sort((a, b) => a.order - b.order);
-  return { spawn, checkpoints, pickups };
+  return { spawn, checkpoints, pickups, enemies };
 }
 
 /**

@@ -117,7 +117,7 @@ Rules:
 ## Milestones (build in vertical slices; commit after each)
 1. (done) Player movement, jump, mouse aiming, shoot, flat test level, placeholder art.
 2. (done) Tiled tilemap level, scrolling camera, checkpoints (activation, respawn, persisted resume). Death rollback currently covers pickups; items, weapon advancements, and spirits join `systems/runState.ts` as they are built.
-3. Enemy base class, health, hit detection, one stage boss.
+3. (done) Enemy base class, health, hit detection, one stage boss. Player has 5 HP with i-frames; walker and turret enemies; two-phase boss (Komodrake) with telegraphed volleys. Defeating the boss clears the stage and banks all progress. Enemy and boss stats live in `src/data/enemies.json`. Boss capture comes with milestone 7.
 4. Weapon data model and archetypes loaded from JSON.
 5. Loot drops, inventory UI, perk rolling (with Vitest coverage).
 6. Element system and status effects.
@@ -132,7 +132,9 @@ Rules:
 - Naming: `camelCase` vars/functions, `PascalCase` classes/types, `kebab-case` data files.
 - Placeholder art: colored rectangles and shapes until mechanics feel right.
 - Commit messages: imperative, scoped (e.g., `combat: add element multiplier`).
-- Levels are authored in Tiled: edit `public/assets/levels/level1.json` with tileset `public/assets/tilesets/tiles.png`. Object layer types: `spawn` (point on the floor), `checkpoint` (rectangle on the floor, int property `order`; it activates when the player touches any part of the column above the rectangle's base, up to the top of the map, so jumping over the flag counts), `pickup` (point). Each checkpoint and pickup needs a unique name, which becomes its id in save data.
+- Levels are authored in Tiled: edit `public/assets/levels/level1.json` with tileset `public/assets/tilesets/tiles.png`. Object layer types: `spawn` (point on the floor), `checkpoint` (rectangle on the floor, int property `order`; it activates when the player touches any part of the column above the rectangle's base, up to the top of the map, so jumping over the flag counts), `pickup` (point), `enemy` and `boss` (point on the surface they stand on, string property `kind` matching a key in `src/data/enemies.json`). Each checkpoint, pickup, enemy, and boss needs a unique name, which becomes its id in save data.
+- Enemies: extend `entities/Enemy.ts` and implement `act()`. Every ranged attack needs a telegraph beat (a `-warn` texture) before it fires. Do not name a field `originX`/`originY`; Phaser sprites already use those.
+- `window.__tamerunner` exposes the Phaser game for console debugging and headless smoke tests.
 - Save data is versioned (`SAVE_VERSION` in `systems/save.ts`). Changing its shape means bumping the version and adding a migration case.
 - Dev shortcut: F9 clears the save and restarts the level.
 

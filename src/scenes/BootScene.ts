@@ -55,6 +55,41 @@ export class BootScene extends Phaser.Scene {
       g.fillTriangle(8, 0, 0, 8, 8, 16);
     });
 
+    this.makeTexture('enemy-walker', 28, 28, (g) => {
+      g.fillStyle(0xe07a5f).fillRect(0, 0, 28, 28);
+      g.fillStyle(0x3d1f17).fillRect(16, 7, 7, 7);
+    });
+
+    // Turret and boss each have a "warn" variant shown during the telegraph beat.
+    for (const [key, body, core] of [
+      ['enemy-turret', 0xb388eb, 0x3b2a5c],
+      ['enemy-turret-warn', 0xfff3b0, 0xff6b6b],
+    ] as const) {
+      this.makeTexture(key, 28, 28, (g) => {
+        g.fillStyle(body).fillRect(0, 6, 28, 22);
+        g.fillStyle(core).fillRect(9, 0, 10, 14);
+      });
+    }
+
+    for (const [key, body, belly, eye] of [
+      ['boss', 0xc8452c, 0xf2a65a, 0x2b0f0a],
+      ['boss-warn', 0xfff3b0, 0xffd166, 0xc8452c],
+    ] as const) {
+      this.makeTexture(key, 128, 128, (g) => {
+        g.fillStyle(body).fillRect(0, 16, 128, 112);
+        g.fillStyle(belly).fillRect(24, 72, 80, 56);
+        g.fillStyle(body).fillTriangle(16, 16, 40, 16, 28, 0);
+        g.fillStyle(body).fillTriangle(52, 16, 76, 16, 64, 0);
+        g.fillStyle(body).fillTriangle(88, 16, 112, 16, 100, 0);
+        g.fillStyle(eye).fillRect(84, 36, 20, 14);
+      });
+    }
+
+    this.makeTexture('enemy-bullet', 10, 10, (g) => {
+      g.fillStyle(0xff6b6b).fillCircle(5, 5, 5);
+      g.fillStyle(0xffe3e3).fillCircle(5, 5, 2);
+    });
+
     this.scene.start('Level');
   }
 

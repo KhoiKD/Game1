@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activateCheckpoint, collectPickup, createRunState } from '../src/systems/runState';
+import { activateCheckpoint, collectPickup, createRunState, defeatEnemy } from '../src/systems/runState';
 import {
   SAVE_KEY,
   SAVE_VERSION,
@@ -16,6 +16,7 @@ const validSave = {
   checkpointId: 'cp-2',
   checkpointOrder: 2,
   secured: ['a', 'b'],
+  defeated: ['enemy-01'],
 };
 
 describe('serializeRun / restoreRun', () => {
@@ -45,6 +46,25 @@ describe('parseSave', () => {
     expect(parseSave('not json')).toBeNull();
     expect(parseSave('42')).toBeNull();
     expect(parseSave('null')).toBeNull();
+  });
+
+  it('migrates a version 1 save by adding an empty defeated list', () => {
+    const v1 = { version: 1, levelId: 'level1', checkpointId: 'cp-1', checkpointOrder: 1, secured: ['a'] };
+    expect(parseSave(JSON.stringify(v1))).toEqual({ ...v1, version: SAVE_VERSION, defeated: [] });
+  });
+
+  it('rejects a current-version save with a missing or invalid defeated list', () => {
+    const { defeated: _omitted, ...withoutDefeated } = validSave;
+    expect(parseSave(JSON.stringify(withoutDefeated))).toBeNull();
+    expect(parseSave(JSON.stringify({ ...validSave, defeated: [3] }))).toBeNull();
+  });
+
+  it('round-trips banked enemy defeats and drops unbanked ones', () => {
+    let run = activateCheckpoint(defeatEnemy(createRunState(), 'enemy-01'), 'cp-1', 1);
+    run = defeatEnemy(run, 'enemy-02');
+    const restored = restoreRun(serializeRun('level1', run)!);
+    expect(restored.securedDefeated).toEqual(['enemy-01']);
+    expect(restored.unsecuredDefeated).toEqual([]);
   });
 
   it('returns null for unknown versions', () => {

@@ -3,8 +3,11 @@ import {
   activateCheckpoint,
   collectPickup,
   createRunState,
+  defeatEnemy,
   die,
   hasCollected,
+  isDefeated,
+  secureAll,
   securedCount,
   unsecuredCount,
 } from '../src/systems/runState';
@@ -82,5 +85,52 @@ describe('die', () => {
   it('returns the same object when there is nothing to lose', () => {
     const s = createRunState();
     expect(die(s)).toBe(s);
+  });
+});
+
+describe('defeated enemies', () => {
+  it('tracks a defeat as unsecured until a checkpoint banks it', () => {
+    let s = defeatEnemy(createRunState(), 'enemy-01');
+    expect(isDefeated(s, 'enemy-01')).toBe(true);
+    expect(s.unsecuredDefeated).toEqual(['enemy-01']);
+    s = activateCheckpoint(s, 'cp-1', 1);
+    expect(s.securedDefeated).toEqual(['enemy-01']);
+    expect(s.unsecuredDefeated).toEqual([]);
+  });
+
+  it('brings back enemies defeated since the checkpoint on death', () => {
+    let s = activateCheckpoint(defeatEnemy(createRunState(), 'enemy-01'), 'cp-1', 1);
+    s = defeatEnemy(s, 'enemy-02');
+    s = die(s);
+    expect(isDefeated(s, 'enemy-01')).toBe(true);
+    expect(isDefeated(s, 'enemy-02')).toBe(false);
+  });
+
+  it('ignores a repeated defeat', () => {
+    const s = defeatEnemy(createRunState(), 'enemy-01');
+    expect(defeatEnemy(s, 'enemy-01')).toBe(s);
+  });
+
+  it('reactivating the current checkpoint banks new defeats', () => {
+    let s = activateCheckpoint(createRunState(), 'cp-1', 1);
+    s = activateCheckpoint(defeatEnemy(s, 'enemy-03'), 'cp-1', 1);
+    expect(s.securedDefeated).toEqual(['enemy-03']);
+  });
+});
+
+describe('secureAll', () => {
+  it('banks pickups and defeats without moving the respawn point', () => {
+    let s = activateCheckpoint(createRunState(), 'cp-4', 4);
+    s = defeatEnemy(collectPickup(s, 'p'), 'boss-01');
+    s = secureAll(s);
+    expect(s.checkpointId).toBe('cp-4');
+    expect(s.secured).toEqual(['p']);
+    expect(s.securedDefeated).toEqual(['boss-01']);
+    expect(die(s)).toBe(s);
+  });
+
+  it('returns the same object when nothing is unsecured', () => {
+    const s = createRunState();
+    expect(secureAll(s)).toBe(s);
   });
 });

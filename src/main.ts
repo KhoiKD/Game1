@@ -3,7 +3,7 @@ import { GAME_HEIGHT, GAME_WIDTH, GRAVITY } from './config';
 import { BootScene } from './scenes/BootScene';
 import { LevelScene } from './scenes/LevelScene';
 
-new Phaser.Game({
+const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
   width: GAME_WIDTH,
@@ -23,3 +23,6 @@ new Phaser.Game({
   },
   scene: [BootScene, LevelScene],
 });
+
+// Handle for the browser console and automated smoke tests.
+(window as unknown as { __tamerunner?: Phaser.Game }).__tamerunner = game;
