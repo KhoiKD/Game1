@@ -132,7 +132,7 @@ Rules:
 - Naming: `camelCase` vars/functions, `PascalCase` classes/types, `kebab-case` data files.
 - Placeholder art: colored rectangles and shapes until mechanics feel right.
 - Commit messages: imperative, scoped (e.g., `combat: add element multiplier`).
-- Levels are authored in Tiled: edit `public/assets/levels/level1.json` with tileset `public/assets/tilesets/tiles.png`. Object layer types: `spawn` (point on the floor), `checkpoint` (rectangle on the floor, int property `order`), `pickup` (point). Each checkpoint and pickup needs a unique name, which becomes its id in save data.
+- Levels are authored in Tiled: edit `public/assets/levels/level1.json` with tileset `public/assets/tilesets/tiles.png`. Object layer types: `spawn` (point on the floor), `checkpoint` (rectangle on the floor, int property `order`; it activates when the player touches any part of the column above the rectangle's base, up to the top of the map, so jumping over the flag counts), `pickup` (point). Each checkpoint and pickup needs a unique name, which becomes its id in save data.
 - Save data is versioned (`SAVE_VERSION` in `systems/save.ts`). Changing its shape means bumping the version and adding a migration case.
 - Dev shortcut: F9 clears the save and restarts the level.
 

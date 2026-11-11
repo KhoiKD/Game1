@@ -2,7 +2,12 @@ import Phaser from 'phaser';
 import { FIRE_INTERVAL_MS, GAME_WIDTH } from '../config';
 import { Bullet } from '../entities/Bullet';
 import { Player } from '../entities/Player';
-import { parseLevelObjects, type LevelObjects, type RawObject } from '../level/parseLevelObjects';
+import {
+  checkpointTriggerZone,
+  parseLevelObjects,
+  type LevelObjects,
+  type RawObject,
+} from '../level/parseLevelObjects';
 import {
   activateCheckpoint,
   collectPickup,
@@ -173,9 +178,9 @@ export class LevelScene extends Phaser.Scene {
   private checkCheckpoints(): void {
     const bounds = this.player.getBounds();
     for (const cp of this.level.checkpoints) {
-      if (!Phaser.Geom.Intersects.RectangleToRectangle(bounds, new Phaser.Geom.Rectangle(
-        cp.rect.x, cp.rect.y, cp.rect.width, cp.rect.height,
-      ))) continue;
+      const zone = checkpointTriggerZone(cp.rect);
+      const zoneRect = new Phaser.Geom.Rectangle(zone.x, zone.y, zone.width, zone.height);
+      if (!Phaser.Geom.Intersects.RectangleToRectangle(bounds, zoneRect)) continue;
       const next = activateCheckpoint(this.run, cp.id, cp.order);
       if (next === this.run) continue;
       const banked = unsecuredCount(this.run);

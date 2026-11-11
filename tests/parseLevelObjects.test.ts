@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseLevelObjects, type RawObject } from '../src/level/parseLevelObjects';
+import { checkpointTriggerZone, parseLevelObjects, type RawObject } from '../src/level/parseLevelObjects';
 
 const spawn: RawObject = { name: 'spawn', type: 'spawn', x: 96, y: 480 };
 const cp = (name: string, order: number, x: number): RawObject => ({
@@ -55,5 +55,24 @@ describe('parseLevelObjects', () => {
       parseLevelObjects([spawn, { name: 'cp', type: 'checkpoint', x: 0, y: 0 }]),
     ).toThrow(/order/);
     expect(() => parseLevelObjects([spawn, { type: 'pickup', x: 0, y: 0 }])).toThrow(/needs a name/);
+  });
+});
+
+describe('checkpointTriggerZone', () => {
+  const flag = { x: 1152, y: 384, width: 32, height: 96 };
+
+  it('spans the flag column from the top of the map to the flag base', () => {
+    expect(checkpointTriggerZone(flag)).toEqual({ x: 1152, y: 0, width: 32, height: 480 });
+  });
+
+  it('covers the flag itself and all the space above it', () => {
+    const zone = checkpointTriggerZone(flag);
+    expect(zone.y).toBeLessThanOrEqual(flag.y);
+    expect(zone.y + zone.height).toBe(flag.y + flag.height);
+  });
+
+  it('keeps the flag column width', () => {
+    expect(checkpointTriggerZone(flag).x).toBe(flag.x);
+    expect(checkpointTriggerZone(flag).width).toBe(flag.width);
   });
 });

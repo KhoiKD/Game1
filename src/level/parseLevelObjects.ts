@@ -86,3 +86,12 @@ export function parseLevelObjects(objects: readonly RawObject[]): LevelObjects {
   checkpoints.sort((a, b) => a.order - b.order);
   return { spawn, checkpoints, pickups };
 }
+
+/**
+ * The area that activates a checkpoint: the flag's column from the top of the
+ * map down to the flag's base. Touching any part of it counts, including
+ * jumping over the flag.
+ */
+export function checkpointTriggerZone(rect: Rect): Rect {
+  return { x: rect.x, y: 0, width: rect.width, height: rect.y + rect.height };
+}
