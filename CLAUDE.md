@@ -3,7 +3,7 @@
 Web-based side-scrolling run-and-gun with creature lore and looter-shooter depth.
 
 ## Design Pillars
-1. **Contra feel:** tight, responsive run-and-gun. 8-direction aiming, jump, short i-frames, pattern-based bosses.
+1. **Contra feel:** tight, responsive run-and-gun. Free mouse aiming, jump, short i-frames, pattern-based bosses.
 2. **Creature lore:** an original world of creatures, types, evolutions, factions. Creatures are the narrative and ability layer.
 3. **Looter-shooter depth:** weapon archetypes, rarities, rolled perks, elemental damage, class abilities, build crafting.
 4. **Fusion rule:** every system must reinforce the others. Creatures supply elements and abilities; weapons supply damage and playstyle; levels test both.
@@ -14,7 +14,7 @@ Web-based side-scrolling run-and-gun with creature lore and looter-shooter depth
 - Only use assets with licenses recorded in `ASSETS.md`.
 
 ## Tech Stack
-- Phaser 3 (Arcade Physics), TypeScript (strict), Vite
+- Phaser 4 (Arcade Physics), TypeScript (strict), Vite. Check Phaser 4 docs before relying on Phaser 3 patterns from memory.
 - Tiled for levels (JSON export), Vitest for unit tests, Playwright for smoke tests
 - Persistence: localStorage (versioned save schema)
 - Deploy: static build to Netlify or GitHub Pages
@@ -75,6 +75,7 @@ Rules:
 - Names, designs, and lore are original. Real species supply inspiration only (silhouette, behavior, habitat). Evolution stages should keep the species recognizable while becoming more fantastical.
 - Each creature: name, type(s), lore blurb, base stats, ability, evolution line, rarity, habitat.
 - Lore blurbs and per-stage ability upgrades are written later, in batches by element. Stats are computed from the balance formula below, not hand-entered.
+- **Lore:** original region with 3–4 factions, a central mystery, and a recurring rival character. Details in `data/lore.json` and `LORE.md`.
 
 **Spirit capture (core mechanic)**
 - Wild creatures appear as enemies and mini-bosses. Fight one normally: deplete its health to zero.
@@ -103,7 +104,6 @@ Rules:
   - **Element tilt** (a bias, not a power difference; each element's tilts sum to the same total): Ember favors Power; Tide favors Vitality and sustain; Volt favors Agility and fire rate; Verdant favors Vitality and defense; Umbra favors Focus, crit, and lifesteal; Gale favors Agility and mobility.
   - **Role base:** each role (Tank, Striker, Support, Skirmisher, etc.) defines a base distribution across the four stats.
 - Add a Vitest simulation that computes all 150 creatures and fails if any one's total stat budget deviates beyond a set band from its rarity-and-stage target, or if any single element or role dominates.
-- **Lore:** original region with 3–4 factions, a central mystery, and a recurring rival character. Details in `data/lore.json` and `LORE.md`.
 
 ## Loot & Progression
 - Drops: enemies, chests, bosses, secrets. Seeded RNG; drop tables in `data/drops.json`.
@@ -144,8 +144,9 @@ Rules:
 - `npm run dev` — Vite dev server
 - `npm run build` — production build
 - `npm test` — Vitest
-- `npm run test:e2e` — Playwright smoke test (game boots, player moves, shot fires)
-- `npm run lint` / `npm run typecheck`
+- `npm run typecheck` — TypeScript check
+- `npm run test:e2e` — Playwright smoke test (game boots, player moves, shot fires). Not set up yet.
+- `npm run lint` — Not set up yet.
 
 ## Working Agreement for Claude
 - Use plan mode before each milestone; propose the approach, wait for approval.
