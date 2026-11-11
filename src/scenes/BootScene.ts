@@ -1,13 +1,18 @@
 import Phaser from 'phaser';
-import { TILE } from '../config';
 
 /**
- * Generates placeholder textures in code (colored shapes) so the game runs
- * with zero external assets. Real art replaces these later; see ASSETS.md.
+ * Loads the level assets and generates the remaining placeholder textures in
+ * code (colored shapes). Real art replaces these later; see ASSETS.md.
  */
 export class BootScene extends Phaser.Scene {
   constructor() {
     super('Boot');
+  }
+
+  preload(): void {
+    const base = import.meta.env.BASE_URL;
+    this.load.image('tiles', `${base}assets/tilesets/tiles.png`);
+    this.load.tilemapTiledJSON('level1', `${base}assets/levels/level1.json`);
   }
 
   create(): void {
@@ -24,11 +29,6 @@ export class BootScene extends Phaser.Scene {
       g.fillStyle(0xffd166).fillRect(0, 0, 10, 4);
     });
 
-    this.makeTexture('tile', TILE, TILE, (g) => {
-      g.fillStyle(0x3a4256).fillRect(0, 0, TILE, TILE);
-      g.lineStyle(2, 0x586179).strokeRect(1, 1, TILE - 2, TILE - 2);
-    });
-
     this.makeTexture('reticle', 24, 24, (g) => {
       g.lineStyle(2, 0xffffff, 0.9);
       g.strokeCircle(12, 12, 8);
@@ -36,6 +36,23 @@ export class BootScene extends Phaser.Scene {
       g.lineBetween(12, 18, 12, 24);
       g.lineBetween(0, 12, 6, 12);
       g.lineBetween(18, 12, 24, 12);
+    });
+
+    // Checkpoint: pole with a flag. Grey when inactive, gold once reached.
+    for (const [key, pole, flag] of [
+      ['checkpoint-off', 0x586179, 0x7a8199],
+      ['checkpoint-on', 0xffe29a, 0xffd166],
+    ] as const) {
+      this.makeTexture(key, 32, 96, (g) => {
+        g.fillStyle(pole).fillRect(4, 0, 4, 96);
+        g.fillStyle(flag).fillTriangle(8, 4, 8, 28, 28, 16);
+      });
+    }
+
+    this.makeTexture('pickup', 16, 16, (g) => {
+      g.fillStyle(0x7ef7a3);
+      g.fillTriangle(8, 0, 16, 8, 8, 16);
+      g.fillTriangle(8, 0, 0, 8, 8, 16);
     });
 
     this.scene.start('Level');

@@ -28,6 +28,7 @@ src/
   systems/           # combat, loot, perks, elements, creatures, progression, save
   data/              # JSON: weapons, perks, creatures, enemies, levels, lore
   ui/                # HUD, menus, tooltips
+  level/             # Tiled object-layer parsing (spawn, checkpoints, pickups)
   util/              # rng (seedable), math, events
 tests/               # Vitest for systems/
 public/assets/       # sprites, audio, tilemaps
@@ -114,8 +115,8 @@ Rules:
 - Save: versioned JSON in localStorage with migration function.
 
 ## Milestones (build in vertical slices; commit after each)
-1. Player movement, jump, mouse aiming, shoot, flat test level, placeholder art.
-2. Tiled tilemap level, scrolling camera, checkpoints (activation, respawn, persisted resume).
+1. (done) Player movement, jump, mouse aiming, shoot, flat test level, placeholder art.
+2. (done) Tiled tilemap level, scrolling camera, checkpoints (activation, respawn, persisted resume). Death rollback currently covers pickups; items, weapon advancements, and spirits join `systems/runState.ts` as they are built.
 3. Enemy base class, health, hit detection, one stage boss.
 4. Weapon data model and archetypes loaded from JSON.
 5. Loot drops, inventory UI, perk rolling (with Vitest coverage).
@@ -131,6 +132,9 @@ Rules:
 - Naming: `camelCase` vars/functions, `PascalCase` classes/types, `kebab-case` data files.
 - Placeholder art: colored rectangles and shapes until mechanics feel right.
 - Commit messages: imperative, scoped (e.g., `combat: add element multiplier`).
+- Levels are authored in Tiled: edit `public/assets/levels/level1.json` with tileset `public/assets/tilesets/tiles.png`. Object layer types: `spawn` (point on the floor), `checkpoint` (rectangle on the floor, int property `order`), `pickup` (point). Each checkpoint and pickup needs a unique name, which becomes its id in save data.
+- Save data is versioned (`SAVE_VERSION` in `systems/save.ts`). Changing its shape means bumping the version and adding a migration case.
+- Dev shortcut: F9 clears the save and restarts the level.
 
 ## Art Direction
 - **Look:** "pixel-grid vector." Sprites read as 32px-scale pixel art (chunky silhouettes, limited palette per sprite, hard-edged shapes snapped to a 32px grid) but carry vector-level detail: crisp anti-aliased edges, smooth gradients and rim lighting, fine line details, subtle glow on elemental effects.

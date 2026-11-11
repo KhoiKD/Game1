@@ -41,6 +41,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return { x: this.x, y: this.y - 8 };
   }
 
+  /** Teleport to a standing position (sprite centre) and clear all motion. */
+  respawnAt(x: number, y: number): void {
+    (this.body as Phaser.Physics.Arcade.Body).reset(x, y);
+    this.setVelocity(0, 0);
+    this.lastGroundedAt = -Infinity;
+  }
+
   /** Called every frame by the scene with the aim target in world coordinates. */
   tick(time: number, aimTarget: Vec2): void {
     const body = this.body as Phaser.Physics.Arcade.Body;
