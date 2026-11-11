@@ -109,6 +109,20 @@ describe('enemy data', () => {
     }
   });
 
+  it('leaves gaps in boss volleys that the player can jump through', () => {
+    // The player is 64px tall. At a typical fighting distance the space between
+    // neighbouring shots must be comfortably larger than that.
+    const fightingDistance = 300;
+    const minGap = 96;
+    for (const kind of bossKinds()) {
+      for (const [i, phase] of getBossStats(kind).phases.entries()) {
+        if (phase.bullets < 2) continue;
+        const gap = fightingDistance * Math.tan((phase.spreadDeg * Math.PI) / 180);
+        expect(gap, `${kind} phase ${i + 1}`).toBeGreaterThanOrEqual(minGap);
+      }
+    }
+  });
+
   it('throws on unknown kinds', () => {
     expect(() => getEnemyStats('nope')).toThrow(/Unknown enemy/);
     expect(() => getBossStats('nope')).toThrow(/Unknown boss/);

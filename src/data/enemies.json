@@ -30,8 +30,8 @@
       "hopSpeedY": 560,
       "leash": 320,
       "phases": [
-        { "untilHpFraction": 0.5, "bullets": 3, "spreadDeg": 10, "cooldownMs": 1500, "hop": false },
-        { "untilHpFraction": 0, "bullets": 5, "spreadDeg": 12, "cooldownMs": 1100, "hop": true }
+        { "untilHpFraction": 0.5, "bullets": 3, "spreadDeg": 22, "cooldownMs": 1500, "hop": false },
+        { "untilHpFraction": 0, "bullets": 5, "spreadDeg": 20, "cooldownMs": 1100, "hop": true }
       ]
     }
   }
