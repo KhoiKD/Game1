@@ -20,6 +20,7 @@ import {
   swapMs,
   type WeaponState,
 } from '../src/systems/weapon';
+import { EQUIP_SLOTS } from '../src/systems/inventory';
 import { createRng } from '../src/util/rng';
 
 const rng = () => 0.5; // centre of the scatter range: no random deviation
@@ -78,6 +79,8 @@ describe('weapon data', () => {
 
   it('gives a starter loadout of valid weapons', () => {
     expect(starterLoadout().map((w) => w.id)).toEqual(weaponData.starterLoadout);
+    expect(weaponData.starterLoadout.length).toBeGreaterThan(0);
+    expect(weaponData.starterLoadout.length).toBeLessThanOrEqual(EQUIP_SLOTS);
   });
 
   it('rejects bad data', () => {

@@ -18,6 +18,8 @@ const HIT_FLASH_MS = 70;
  */
 export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
   readonly enemyId: string;
+  /** Key in enemies.json; also the name of this enemy's drop table. */
+  readonly kind: string;
   readonly maxHp: number;
   readonly contactDamage: number;
   hp: number;
@@ -27,6 +29,7 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
   constructor(scene: Phaser.Scene, def: EnemyDef, texture: string, stats: { hp: number; contactDamage: number }) {
     super(scene, def.x, def.y, texture);
     this.enemyId = def.id;
+    this.kind = def.kind;
     this.maxHp = stats.hp;
     this.hp = stats.hp;
     this.contactDamage = stats.contactDamage;

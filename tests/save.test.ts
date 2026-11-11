@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { activateCheckpoint, collectPickup, createRunState, defeatEnemy } from '../src/systems/runState';
+import { addItem, createInventory } from '../src/systems/inventory';
+import type { WeaponInstance } from '../src/systems/loot';
+import {
+  activateCheckpoint,
+  collectPickup,
+  createRunState,
+  defeatEnemy,
+  setInventory,
+} from '../src/systems/runState';
+
+const weapon = (uid: string): WeaponInstance => ({
+  uid,
+  baseId: 'pocket-sting',
+  rarity: 'common',
+  damageRoll: 1,
+  perks: [],
+});
 import {
   SAVE_KEY,
   SAVE_VERSION,
@@ -17,6 +33,7 @@ const validSave = {
   checkpointOrder: 2,
   secured: ['a', 'b'],
   defeated: ['enemy-01'],
+  inventory: { items: [weapon('a')], equipped: ['a', null, null] },
 };
 
 describe('serializeRun / restoreRun', () => {
@@ -50,7 +67,40 @@ describe('parseSave', () => {
 
   it('migrates a version 1 save by adding an empty defeated list', () => {
     const v1 = { version: 1, levelId: 'level1', checkpointId: 'cp-1', checkpointOrder: 1, secured: ['a'] };
-    expect(parseSave(JSON.stringify(v1))).toEqual({ ...v1, version: SAVE_VERSION, defeated: [] });
+    expect(parseSave(JSON.stringify(v1))).toEqual({ ...v1, version: SAVE_VERSION, defeated: [], inventory: null });
+  });
+
+  it('migrates a version 2 save by adding an empty inventory slot', () => {
+    const v2 = { version: 2, levelId: 'level1', checkpointId: 'cp-1', checkpointOrder: 1, secured: [], defeated: ['e'] };
+    expect(parseSave(JSON.stringify(v2))).toEqual({ ...v2, version: SAVE_VERSION, inventory: null });
+  });
+
+  it('uses the fallback inventory when a migrated save has none', () => {
+    const fallback = createInventory([weapon('starter')]);
+    const run = restoreRun({ ...validSave, inventory: null }, fallback);
+    expect(run.inventory).toBe(fallback);
+    expect(run.securedInventory).toBe(fallback);
+  });
+
+  it('round-trips the banked inventory and drops unbanked weapons', () => {
+    const start = createInventory([weapon('a'), weapon('b')]);
+    let run = activateCheckpoint(createRunState(start), 'cp-1', 1);
+    run = setInventory(run, addItem(run.inventory, weapon('found-later'))!);
+    const save = JSON.parse(JSON.stringify(serializeRun('level1', run)));
+    const restored = restoreRun(parseSave(JSON.stringify(save))!);
+    expect(restored.inventory.items.map((i) => i.uid)).toEqual(['a', 'b']);
+    expect(restored.inventory.equipped).toEqual(['a', 'b', null]);
+  });
+
+  it('rejects a save whose inventory is malformed', () => {
+    const good = { items: [weapon('a')], equipped: ['a', null, null] };
+    const withInventory = (inventory: unknown) => JSON.stringify({ ...validSave, inventory });
+    expect(parseSave(withInventory(good))).not.toBeNull();
+    expect(parseSave(withInventory({ ...good, equipped: ['a', null] }))).toBeNull();
+    expect(parseSave(withInventory({ ...good, equipped: ['missing', null, null] }))).toBeNull();
+    expect(parseSave(withInventory({ items: [{ uid: 'a' }], equipped: [null, null, null] }))).toBeNull();
+    expect(parseSave(withInventory({ items: [weapon('a'), weapon('a')], equipped: [null, null, null] }))).toBeNull();
+    expect(parseSave(withInventory(undefined))).toBeNull();
   });
 
   it('rejects a current-version save with a missing or invalid defeated list', () => {

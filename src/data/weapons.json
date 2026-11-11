@@ -52,7 +52,5 @@
     { "id": "brush-cutter", "name": "Brush Cutter", "archetype": "melee-burst", "element": "Verdant", "rarity": "uncommon" },
     { "id": "longwake", "name": "Longwake", "archetype": "charge-cannon", "element": "Tide", "rarity": "rare" }
   ],
-  "starterLoadout": [
-    "field-carbine", "pocket-sting", "scattermaw", "volt-lance", "cinder-lobber", "brush-cutter", "longwake"
-  ]
+  "starterLoadout": ["field-carbine", "pocket-sting"]
 }

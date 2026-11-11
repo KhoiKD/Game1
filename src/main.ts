@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH, GRAVITY } from './config';
 import { BootScene } from './scenes/BootScene';
+import { InventoryScene } from './scenes/InventoryScene';
 import { LevelScene } from './scenes/LevelScene';
 
 const game = new Phaser.Game({
@@ -21,7 +22,7 @@ const game = new Phaser.Game({
       debug: false,
     },
   },
-  scene: [BootScene, LevelScene],
+  scene: [BootScene, LevelScene, InventoryScene],
 });
 
 // Handle for the browser console and automated smoke tests.

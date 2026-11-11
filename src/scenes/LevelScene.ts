@@ -10,7 +10,8 @@ import {
   PLAYER_MAX_HP,
 } from '../config';
 import { getBossStats, getEnemyStats } from '../data/enemyData';
-import { starterLoadout, type ResolvedWeapon } from '../data/weaponData';
+import { resolveWeaponInstance, rollDropFor, sanitizeInventory, starterInventory } from '../data/lootData';
+import type { ResolvedWeapon } from '../data/weaponData';
 import { Boss } from '../entities/Boss';
 import { Bullet } from '../entities/Bullet';
 import { Enemy, type EnemyContext } from '../entities/Enemy';
@@ -25,6 +26,8 @@ import {
   type RawObject,
 } from '../level/parseLevelObjects';
 import { applyDamage, createHealth, isInvulnerable, refill, type Health } from '../systems/health';
+import { INVENTORY_CAPACITY, addItem, equippedItems, type Inventory } from '../systems/inventory';
+import type { WeaponInstance } from '../systems/loot';
 import {
   activateCheckpoint,
   collectPickup,
@@ -35,7 +38,9 @@ import {
   isDefeated,
   secureAll,
   securedCount,
+  setInventory,
   unsecuredCount,
+  unsecuredWeaponCount,
   type RunState,
 } from '../systems/runState';
 import { clearSave, getStorage, loadSave, restoreRun, serializeRun, writeSave } from '../systems/save';
@@ -50,12 +55,21 @@ import {
   type WeaponState,
 } from '../systems/weapon';
 import { aimAngle, type Vec2 } from '../util/aim';
+import { capitalize } from '../ui/rarity';
 import { createRng, type Rng } from '../util/rng';
+import type { InventorySceneData } from './InventoryScene';
 
 const LEVEL_ID = 'level1';
 const FALL_MARGIN = 96; // how far below the map the player may fall before dying
 const PLAYER_HALF_HEIGHT = 32;
 const BOSS_BAR_WIDTH = 520;
+
+interface GroundLoot {
+  sprite: Phaser.GameObjects.Image;
+  instance: WeaponInstance;
+  /** Set once the "inventory full" message has been shown for this drop. */
+  warnedFull: boolean;
+}
 
 /** First playable level, loaded from the Tiled map assets/levels/level1.json. */
 export class LevelScene extends Phaser.Scene {
@@ -75,6 +89,10 @@ export class LevelScene extends Phaser.Scene {
   private mapHeightPx = 0;
   private weapons: ResolvedWeapon[] = [];
   private weaponStates: WeaponState[] = [];
+  /** Uid of the weapon in each loadout position, parallel to `weapons`. */
+  private weaponUids: string[] = [];
+  private groundLoot: GroundLoot[] = [];
+  private stageCleared = false;
   private weaponIndex = 0;
   private weaponHud!: Phaser.GameObjects.Text;
   private weaponHudText = '';
@@ -97,10 +115,12 @@ export class LevelScene extends Phaser.Scene {
     this.toastText = undefined;
     this.boss = null;
     this.deathPending = false;
-    // Until loot exists (milestone 5), the player carries one weapon of every archetype.
-    this.weapons = starterLoadout();
-    this.weaponStates = this.weapons.map(createWeaponState);
+    this.weapons = [];
+    this.weaponStates = [];
+    this.weaponUids = [];
     this.weaponIndex = 0;
+    this.groundLoot = [];
+    this.stageCleared = false;
     this.weaponHudText = '';
     this.pendingSwap = 0;
     this.pendingReload = false;
@@ -124,6 +144,7 @@ export class LevelScene extends Phaser.Scene {
     this.level = parseLevelObjects(rawObjects);
 
     this.run = this.initialRunState();
+    this.rebuildLoadout(true);
     this.health = createHealth(PLAYER_MAX_HP);
     this.spawnCheckpointsAndPickups();
 
@@ -192,6 +213,9 @@ export class LevelScene extends Phaser.Scene {
     onPress('E', () => (this.pendingSwap += 1));
     onPress('Q', () => (this.pendingSwap -= 1));
     onPress('R', () => (this.pendingReload = true));
+    onPress('I', () => this.openInventory());
+    keyboard.addCapture('TAB');
+    onPress('TAB', () => this.openInventory());
 
     this.buildHud();
 
@@ -223,6 +247,7 @@ export class LevelScene extends Phaser.Scene {
     this.tickEnemies(time);
     this.checkCheckpoints();
     this.checkPickups();
+    this.checkLoot();
     this.refreshBossBar();
     if (this.player.y > this.mapHeightPx + FALL_MARGIN) this.handleDeath();
   }
@@ -235,7 +260,12 @@ export class LevelScene extends Phaser.Scene {
       save !== null &&
       save.levelId === LEVEL_ID &&
       this.level.checkpoints.some((cp) => cp.id === save.checkpointId);
-    return resumable ? restoreRun(save) : createRunState();
+    const starter = starterInventory();
+    if (!resumable) return createRunState(starter);
+    // A save can refer to weapons or perks that have since been removed from the data.
+    const restored = restoreRun(save, starter);
+    const inventory = sanitizeInventory(restored.inventory);
+    return { ...restored, inventory, securedInventory: inventory };
   }
 
   private persist(): void {
@@ -372,6 +402,7 @@ export class LevelScene extends Phaser.Scene {
 
   private defeat(enemy: Enemy): void {
     this.run = defeatEnemy(this.run, enemy.enemyId);
+    this.dropLoot(enemy.kind, enemy.x, enemy.y);
     if (enemy === this.boss) {
       // Clearing the stage banks everything, so the win cannot be lost afterwards.
       const name = this.boss.displayName;
@@ -400,7 +431,8 @@ export class LevelScene extends Phaser.Scene {
     const lost = unsecuredCount(this.run);
     this.run = die(this.run);
     this.health = refill(this.health);
-    this.weaponStates = this.weapons.map(createWeaponState);
+    this.clearGroundLoot();
+    this.rebuildLoadout(true);
     this.syncPickups();
     this.killAll(this.bullets);
     this.killAll(this.enemyBullets);
@@ -426,7 +458,97 @@ export class LevelScene extends Phaser.Scene {
 
   // ---- shooting, HUD -----------------------------------------------------
 
+  // ---- loot and inventory ------------------------------------------------
+
+  /** Rolls the drop table for `source` and, if something drops, puts it on the ground. */
+  private dropLoot(source: string, x: number, y: number): void {
+    const instance = rollDropFor(source, this.rng);
+    if (!instance) return;
+    const sprite = this.add.image(x, y, `loot-${instance.rarity}`).setDepth(2);
+    this.tweens.add({ targets: sprite, y: y - 6, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    this.groundLoot.push({ sprite, instance, warnedFull: false });
+  }
+
+  private checkLoot(): void {
+    if (this.groundLoot.length === 0) return;
+    const bounds = this.player.getBounds();
+    for (const loot of [...this.groundLoot]) {
+      if (!Phaser.Geom.Intersects.RectangleToRectangle(bounds, loot.sprite.getBounds())) continue;
+      const next = addItem(this.run.inventory, loot.instance);
+      if (!next) {
+        if (!loot.warnedFull) this.toast('Inventory full · press I to discard a weapon');
+        loot.warnedFull = true;
+        continue;
+      }
+      this.applyInventory(next);
+      this.removeGroundLoot(loot);
+      const weapon = resolveWeaponInstance(loot.instance);
+      this.toast(`Picked up ${capitalize(loot.instance.rarity)} ${weapon.name}`);
+    }
+  }
+
+  private removeGroundLoot(loot: GroundLoot): void {
+    this.tweens.killTweensOf(loot.sprite);
+    loot.sprite.destroy();
+    this.groundLoot = this.groundLoot.filter((other) => other !== loot);
+  }
+
+  private clearGroundLoot(): void {
+    for (const loot of [...this.groundLoot]) this.removeGroundLoot(loot);
+  }
+
+  /** Every inventory change goes through here so the loadout, HUD, and save stay in step. */
+  private applyInventory(inventory: Inventory): void {
+    if (inventory === this.run.inventory) return;
+    this.run = setInventory(this.run, inventory);
+    // After the boss is down nothing can be lost any more, so bank changes right away.
+    if (this.stageCleared) {
+      this.run = secureAll(this.run);
+      this.persist();
+    }
+    this.rebuildLoadout(false);
+    this.refreshHud();
+  }
+
+  /**
+   * Rebuilds the playable weapons from the equipped inventory slots. Weapons
+   * that stay equipped keep their ammo unless `reset` is set.
+   */
+  private rebuildLoadout(reset: boolean): void {
+    const currentUid = this.weaponUids[this.weaponIndex];
+    const previous = new Map<string, WeaponState>();
+    if (!reset) this.weaponUids.forEach((uid, i) => previous.set(uid, this.weaponStates[i]!));
+
+    const equipped = equippedItems(this.run.inventory);
+    this.weapons = equipped.map(resolveWeaponInstance);
+    this.weaponUids = equipped.map((item) => item.uid);
+    this.weaponStates = this.weapons.map((weapon, i) => {
+      const kept = previous.get(this.weaponUids[i]!);
+      return kept ? holster(kept) : createWeaponState(weapon);
+    });
+    const sameWeapon = currentUid === undefined ? -1 : this.weaponUids.indexOf(currentUid);
+    this.weaponIndex = sameWeapon !== -1 ? sameWeapon : Math.min(this.weaponIndex, Math.max(0, this.weapons.length - 1));
+    this.weaponHudText = '';
+  }
+
+  private openInventory(): void {
+    if (this.scene.isActive('Inventory')) return;
+    const data: InventorySceneData = {
+      inventory: this.run.inventory,
+      onClose: (inventory) => {
+        this.input.setDefaultCursor('none');
+        this.applyInventory(inventory);
+        this.pendingSwap = 0;
+        this.pendingReload = false;
+        this.scene.resume();
+      },
+    };
+    this.scene.launch('Inventory', data);
+    this.scene.pause();
+  }
+
   private tickWeapon(time: number, triggerDown: boolean, target: Vec2): void {
+    if (this.weapons.length === 0) return;
     while (this.pendingSwap !== 0) {
       const direction = this.pendingSwap > 0 ? 1 : -1;
       this.swapWeapon(direction, time);
@@ -490,7 +612,7 @@ export class LevelScene extends Phaser.Scene {
   private buildHud(): void {
     const style = { fontFamily: 'monospace', fontSize: '14px', color: '#9aa4bf' };
     this.add
-      .text(16, 12, 'A/D move · Space jump · Mouse aim · Click fire · R reload · Q/E swap weapon · F9 reset save', style)
+      .text(16, 12, 'A/D move · Space jump · Mouse aim · Click fire · R reload · Q/E swap · I inventory · F9 reset save', style)
       .setScrollFactor(0)
       .setDepth(100);
     this.hud = this.add.text(16, 34, '', style).setScrollFactor(0).setDepth(100);
@@ -510,12 +632,19 @@ export class LevelScene extends Phaser.Scene {
   }
 
   private refreshHud(): void {
-    const unsecured = unsecuredCount(this.run);
+    const pickups = unsecuredCount(this.run);
+    const weapons = unsecuredWeaponCount(this.run);
+    const atRisk =
+      pickups + weapons === 0
+        ? 'nothing'
+        : [pickups > 0 ? `${pickups} pickup${pickups === 1 ? '' : 's'}` : '', weapons > 0 ? `${weapons} weapon${weapons === 1 ? '' : 's'}` : '']
+            .filter(Boolean)
+            .join(', ');
     this.hud
       .setText(
-        `Secured ${securedCount(this.run)}  ·  Unsecured ${unsecured}  ·  Checkpoint: ${this.run.checkpointId ?? 'start'}`,
+        `Secured ${securedCount(this.run)}  ·  At risk: ${atRisk}  ·  Bag ${this.run.inventory.items.length}/${INVENTORY_CAPACITY}  ·  Checkpoint: ${this.run.checkpointId ?? 'start'}`,
       )
-      .setColor(unsecured > 0 ? '#ffd166' : '#9aa4bf');
+      .setColor(pickups + weapons > 0 ? '#ffd166' : '#9aa4bf');
 
     this.healthPips.clear();
     for (let i = 0; i < this.health.max; i++) {
@@ -538,6 +667,7 @@ export class LevelScene extends Phaser.Scene {
   }
 
   private showStageClear(bossName: string): void {
+    this.stageCleared = true;
     this.add
       .text(GAME_WIDTH / 2, 110, `STAGE CLEAR · ${bossName} defeated`, {
         fontFamily: 'monospace',

@@ -1,3 +1,5 @@
+import { createInventory, type Inventory } from './inventory';
+
 /**
  * Run state: everything the player has gained during a run, split into what is
  * secured (banked at a checkpoint) and what is unsecured (gained since).
@@ -5,9 +7,13 @@
  * gains safe. Stage progress follows the same rule: enemies defeated since the
  * last checkpoint come back on death.
  *
+ * The inventory uses a snapshot: `securedInventory` is the inventory as it
+ * stood when last banked, and death restores it. That rolls back weapons picked
+ * up, weapons discarded, and loadout changes alike.
+ *
  * All functions are pure and return new objects; state is fully serializable.
- * Items, weapon advancements, and captured spirits join this state in later
- * milestones and follow the same secured/unsecured rule.
+ * Weapon advancements and captured spirits join this state in later milestones
+ * and follow the same rule.
  */
 export interface RunState {
   readonly checkpointId: string | null;
@@ -21,9 +27,13 @@ export interface RunState {
   readonly securedDefeated: readonly string[];
   /** Enemy ids defeated since the last checkpoint. They respawn on death. */
   readonly unsecuredDefeated: readonly string[];
+  /** Weapons carried right now. */
+  readonly inventory: Inventory;
+  /** The inventory as last banked. Death restores it. */
+  readonly securedInventory: Inventory;
 }
 
-export function createRunState(): RunState {
+export function createRunState(inventory: Inventory = createInventory()): RunState {
   return {
     checkpointId: null,
     checkpointOrder: -1,
@@ -31,6 +41,8 @@ export function createRunState(): RunState {
     unsecured: [],
     securedDefeated: [],
     unsecuredDefeated: [],
+    inventory,
+    securedInventory: inventory,
   };
 }
 
@@ -52,8 +64,18 @@ export function defeatEnemy(state: RunState, id: string): RunState {
   return { ...state, unsecuredDefeated: [...state.unsecuredDefeated, id] };
 }
 
+/** Replaces the carried inventory (pickup, equip, discard). Unsecured until banked. */
+export function setInventory(state: RunState, inventory: Inventory): RunState {
+  if (inventory === state.inventory) return state;
+  return { ...state, inventory };
+}
+
 function hasUnsecured(state: RunState): boolean {
-  return state.unsecured.length > 0 || state.unsecuredDefeated.length > 0;
+  return (
+    state.unsecured.length > 0 ||
+    state.unsecuredDefeated.length > 0 ||
+    state.inventory !== state.securedInventory
+  );
 }
 
 /** Bank everything unsecured without changing the respawn point (used on stage clear). */
@@ -65,6 +87,7 @@ export function secureAll(state: RunState): RunState {
     unsecured: [],
     securedDefeated: [...state.securedDefeated, ...state.unsecuredDefeated],
     unsecuredDefeated: [],
+    securedInventory: state.inventory,
   };
 }
 
@@ -83,7 +106,7 @@ export function activateCheckpoint(state: RunState, id: string, order: number): 
 /** Death: roll back everything gained since the last checkpoint. */
 export function die(state: RunState): RunState {
   if (!hasUnsecured(state)) return state;
-  return { ...state, unsecured: [], unsecuredDefeated: [] };
+  return { ...state, unsecured: [], unsecuredDefeated: [], inventory: state.securedInventory };
 }
 
 export function securedCount(state: RunState): number {
@@ -92,4 +115,11 @@ export function securedCount(state: RunState): number {
 
 export function unsecuredCount(state: RunState): number {
   return state.unsecured.length;
+}
+
+/** Weapons carried now that were not in the last banked inventory. */
+export function unsecuredWeaponCount(state: RunState): number {
+  if (state.inventory === state.securedInventory) return 0;
+  const banked = new Set(state.securedInventory.items.map((item) => item.uid));
+  return state.inventory.items.filter((item) => !banked.has(item.uid)).length;
 }

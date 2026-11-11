@@ -27,7 +27,7 @@ src/
   entities/          # Player, Enemy (base), Boss, Projectile, Pickup
   systems/           # combat, loot, perks, elements, creatures, progression, save
   data/              # JSON: weapons, perks, creatures, enemies, levels, lore
-  ui/                # HUD, menus, tooltips
+  ui/                # HUD, menus, tooltips, shared display helpers (rarity colours)
   level/             # Tiled object-layer parsing (spawn, checkpoints, pickups)
   util/              # rng (seedable), math, events
 tests/               # Vitest for systems/
@@ -70,6 +70,11 @@ Rules:
 - **Elements:** each weapon has an element or is kinetic.
 - **Stats:** damage, fire rate, range, stability, reload, magazine size, handling.
 - Weapons defined in `data/weapons.json`; perks in `data/perks.json`.
+- A weapon the player owns is a `WeaponInstance` (`systems/loot.ts`): a base weapon id plus its rolled rarity, damage roll, and perk ids. `resolveWeaponInstance` turns it into playable stats: base, then damage roll, then perks.
+- A base weapon's `rarity` in `weapons.json` is a floor: it never drops below that rarity.
+- Rarity rules in `drops.json`: common and uncommon roll barrel and magazine perks, rare and epic add a trait, legendary adds a signature. Each rarity has its own damage-roll range.
+- A perk lists the archetypes it can roll on (`"*"` for any) and its stat mods (`add` or `mul`). Every archetype must keep at least one perk per slot; a test enforces this.
+- Drop tables in `drops.json` are keyed by the enemy or boss `kind`. A new enemy kind needs a table (a test enforces this).
 - `weapons.json` layout: `archetypes` hold every stat; each entry in `weapons` names an archetype and may override any stat under `stats`. The file is validated at load (`data/weaponData.ts`), so bad data throws with the offending weapon and field.
 - Trigger modes: `auto` (hold), `semi` (one shot per click), `burst` (hold for repeated bursts), `semi-burst` (one full burst per click; the Field Carbine uses this), `charge` (hold, release when full; releasing early cancels).
 - Stat effects: stability sets random scatter, handling sets the delay after a swap, range and projectile speed set how long a shot lives, `pierce` passes through extra enemies, `gravity` arcs the shot, `blastRadius` explodes on impact.
@@ -112,7 +117,7 @@ Rules:
 
 ## Loot & Progression
 - Drops: enemies, chests, bosses, secrets. Seeded RNG; drop tables in `data/drops.json`.
-- Inventory: weapons, bonds, consumables, materials.
+- Inventory: weapons, bonds, consumables, materials. Weapons only so far (`systems/inventory.ts`): 20 carried, 3 equipped, equipped weapons cannot be discarded. The inventory follows the checkpoint rule as a snapshot: death restores the inventory as last banked, including discards and loadout changes.
 - Power progression: level plus a gear-score-style "Power" stat that gates stage difficulty tiers.
 - Classes (3 to start): each has a unique ability, passive, and weapon affinity. Placeholder: Vanguard, Skirmisher, Warden.
 - Hub scene: manage loadout, bonds, shops, stage select.
@@ -123,7 +128,7 @@ Rules:
 2. (done) Tiled tilemap level, scrolling camera, checkpoints (activation, respawn, persisted resume). Death rollback currently covers pickups; items, weapon advancements, and spirits join `systems/runState.ts` as they are built.
 3. (done) Enemy base class, health, hit detection, one stage boss. Player has 5 HP with i-frames; walker and turret enemies; two-phase boss (Komodrake) with telegraphed volleys. Defeating the boss clears the stage and banks all progress. Enemy and boss stats live in `src/data/enemies.json`. Boss capture comes with milestone 7.
 4. (done) Weapon data model and archetypes loaded from JSON. All seven archetypes are playable; firing logic is a pure state machine in `systems/weapon.ts`. Until loot exists, the player carries the `starterLoadout` from `weapons.json` (one weapon per archetype). Elements are labels only until milestone 6.
-5. Loot drops, inventory UI, perk rolling (with Vitest coverage).
+5. (done) Loot drops, inventory UI, perk rolling (with Vitest coverage). Enemies drop weapons from `drops.json` tables; rarity sets perk slots and the damage roll; perks come from `perks.json`. The player starts with two starter weapons, carries up to 20, and equips 3. Perks are stat modifiers only; on-hit and on-kill perks come with milestone 6.
 6. Element system and status effects.
 7. Spirit capture, equipped-spirit perks and abilities, evolution, stat balancing formula and simulation test.
 8. Classes, hub, progression, save/load.
@@ -142,6 +147,7 @@ Rules:
 - Save data is versioned (`SAVE_VERSION` in `systems/save.ts`). Changing its shape means bumping the version and adding a migration case.
 - Dev shortcut: F9 clears the save and restarts the level.
 - Read one-shot key presses (swap, reload) from `keydown-<KEY>` events, not `JustDown` polling, which misses taps shorter than a frame.
+- Overlay screens (inventory) are their own scene launched over the paused level; they hand their result back through an `onClose` callback. All inventory changes in the level go through `applyInventory`.
 
 ## Art Direction
 - **Look:** "pixel-grid vector." Sprites read as 32px-scale pixel art (chunky silhouettes, limited palette per sprite, hard-edged shapes snapped to a 32px grid) but carry vector-level detail: crisp anti-aliased edges, smooth gradients and rim lighting, fine line details, subtle glow on elemental effects.

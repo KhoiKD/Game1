@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { RARITIES } from '../data/weaponData';
+import { RARITY_COLOR } from '../ui/rarity';
 
 /**
  * Loads the level assets and generates the remaining placeholder textures in
@@ -47,6 +49,15 @@ export class BootScene extends Phaser.Scene {
       g.fillStyle(0x4cc9f0).fillRect(0, 0, 30, 12);
       g.fillStyle(0xe0fbff).fillRect(8, 3, 22, 6);
     });
+
+    // Dropped weapons: a crate whose band shows the rarity.
+    for (const rarity of RARITIES) {
+      this.makeTexture(`loot-${rarity}`, 22, 18, (g) => {
+        g.fillStyle(0x1c2233).fillRect(0, 0, 22, 18);
+        g.fillStyle(RARITY_COLOR[rarity]).fillRect(0, 6, 22, 6);
+        g.lineStyle(2, RARITY_COLOR[rarity]).strokeRect(1, 1, 20, 16);
+      });
+    }
 
     this.makeTexture('reticle', 24, 24, (g) => {
       g.lineStyle(2, 0xffffff, 0.9);
