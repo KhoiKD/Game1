@@ -3,6 +3,7 @@
     "walker": {
       "behavior": "walker",
       "element": "Verdant",
+      "creature": { "family": "verdant-stickinsect", "stage": 1 },
       "hp": 3,
       "contactDamage": 1,
       "speed": 70,
@@ -11,6 +12,7 @@
     "turret": {
       "behavior": "turret",
       "element": "Volt",
+      "creature": { "family": "volt-flytrap", "stage": 1 },
       "hp": 4,
       "contactDamage": 1,
       "range": 520,
@@ -24,6 +26,7 @@
       "name": "Komodrake",
       "family": "ember-komodo",
       "element": "Ember",
+      "creature": { "family": "ember-komodo", "stage": 3 },
       "hp": 120,
       "contactDamage": 1,
       "activateRange": 560,

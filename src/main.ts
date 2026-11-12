@@ -3,6 +3,7 @@ import { GAME_HEIGHT, GAME_WIDTH, GRAVITY } from './config';
 import { BootScene } from './scenes/BootScene';
 import { InventoryScene } from './scenes/InventoryScene';
 import { LevelScene } from './scenes/LevelScene';
+import { SpiritsScene } from './scenes/SpiritsScene';
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -22,7 +23,7 @@ const game = new Phaser.Game({
       debug: false,
     },
   },
-  scene: [BootScene, LevelScene, InventoryScene],
+  scene: [BootScene, LevelScene, InventoryScene, SpiritsScene],
 });
 
 // Handle for the browser console and automated smoke tests.

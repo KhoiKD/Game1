@@ -1,4 +1,5 @@
 import { createInventory, type Inventory } from './inventory';
+import { emptyCollection, type SpiritCollection } from './spirits';
 
 /**
  * Run state: everything the player has gained during a run, split into what is
@@ -9,11 +10,11 @@ import { createInventory, type Inventory } from './inventory';
  *
  * The inventory uses a snapshot: `securedInventory` is the inventory as it
  * stood when last banked, and death restores it. That rolls back weapons picked
- * up, weapons discarded, and loadout changes alike.
+ * up, weapons discarded, and loadout changes alike. Captured spirits work the
+ * same way through `securedSpirits`.
  *
  * All functions are pure and return new objects; state is fully serializable.
- * Weapon advancements and captured spirits join this state in later milestones
- * and follow the same rule.
+ * Weapon advancements join this state in a later milestone and follow the same rule.
  */
 export interface RunState {
   readonly checkpointId: string | null;
@@ -31,9 +32,16 @@ export interface RunState {
   readonly inventory: Inventory;
   /** The inventory as last banked. Death restores it. */
   readonly securedInventory: Inventory;
+  /** Captured spirits, their growth, and which are equipped. */
+  readonly spirits: SpiritCollection;
+  /** The spirits as last banked. Death restores them. */
+  readonly securedSpirits: SpiritCollection;
 }
 
-export function createRunState(inventory: Inventory = createInventory()): RunState {
+export function createRunState(
+  inventory: Inventory = createInventory(),
+  spirits: SpiritCollection = emptyCollection(),
+): RunState {
   return {
     checkpointId: null,
     checkpointOrder: -1,
@@ -43,6 +51,8 @@ export function createRunState(inventory: Inventory = createInventory()): RunSta
     unsecuredDefeated: [],
     inventory,
     securedInventory: inventory,
+    spirits,
+    securedSpirits: spirits,
   };
 }
 
@@ -70,11 +80,18 @@ export function setInventory(state: RunState, inventory: Inventory): RunState {
   return { ...state, inventory };
 }
 
+/** Replaces the spirit collection (capture, growth, equip). Unsecured until banked. */
+export function setSpirits(state: RunState, spirits: SpiritCollection): RunState {
+  if (spirits === state.spirits) return state;
+  return { ...state, spirits };
+}
+
 function hasUnsecured(state: RunState): boolean {
   return (
     state.unsecured.length > 0 ||
     state.unsecuredDefeated.length > 0 ||
-    state.inventory !== state.securedInventory
+    state.inventory !== state.securedInventory ||
+    state.spirits !== state.securedSpirits
   );
 }
 
@@ -88,6 +105,7 @@ export function secureAll(state: RunState): RunState {
     securedDefeated: [...state.securedDefeated, ...state.unsecuredDefeated],
     unsecuredDefeated: [],
     securedInventory: state.inventory,
+    securedSpirits: state.spirits,
   };
 }
 
@@ -106,7 +124,13 @@ export function activateCheckpoint(state: RunState, id: string, order: number): 
 /** Death: roll back everything gained since the last checkpoint. */
 export function die(state: RunState): RunState {
   if (!hasUnsecured(state)) return state;
-  return { ...state, unsecured: [], unsecuredDefeated: [], inventory: state.securedInventory };
+  return {
+    ...state,
+    unsecured: [],
+    unsecuredDefeated: [],
+    inventory: state.securedInventory,
+    spirits: state.securedSpirits,
+  };
 }
 
 export function securedCount(state: RunState): number {
@@ -122,4 +146,11 @@ export function unsecuredWeaponCount(state: RunState): number {
   if (state.inventory === state.securedInventory) return 0;
   const banked = new Set(state.securedInventory.items.map((item) => item.uid));
   return state.inventory.items.filter((item) => !banked.has(item.uid)).length;
+}
+
+/** Spirits captured since the last bank: they are lost on death. */
+export function unsecuredSpiritCount(state: RunState): number {
+  if (state.spirits === state.securedSpirits) return 0;
+  const banked = new Set(state.securedSpirits.spirits.map((spirit) => spirit.familyId));
+  return state.spirits.spirits.filter((spirit) => !banked.has(spirit.familyId)).length;
 }

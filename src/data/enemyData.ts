@@ -1,4 +1,5 @@
 import type { Element } from '../systems/combat';
+import { findFamily, type CreatureRef } from './creatureData';
 import { isElement } from './elementData';
 import raw from './enemies.json';
 
@@ -6,6 +7,8 @@ export interface WalkerStats {
   behavior: 'walker';
   /** Null for an enemy with no element. */
   element: Element | null;
+  /** The creature this enemy is; its spirit can be captured. Absent for enemies that cannot be captured. */
+  creature?: CreatureRef;
   hp: number;
   contactDamage: number;
   speed: number;
@@ -15,6 +18,7 @@ export interface WalkerStats {
 export interface TurretStats {
   behavior: 'turret';
   element: Element | null;
+  creature?: CreatureRef;
   hp: number;
   contactDamage: number;
   range: number;
@@ -38,6 +42,7 @@ export interface BossStats {
   /** Family id in creatures.json this boss is drawn from. */
   family: string;
   element: Element | null;
+  creature?: CreatureRef;
   hp: number;
   contactDamage: number;
   activateRange: number;
@@ -56,7 +61,13 @@ const data = raw as unknown as {
   bosses: Record<string, BossStats>;
 };
 
-function checkElement<T extends { element: Element | null }>(stats: T, kind: string): T {
+function checkElement<T extends { element: Element | null; creature?: CreatureRef }>(stats: T, kind: string): T {
+  if (stats.creature) {
+    const stage = stats.creature.stage;
+    if (!findFamily(stats.creature.family) || (stage !== 1 && stage !== 2 && stage !== 3)) {
+      throw new Error(`enemies.json: "${kind}": creature must name a family in creatures.json and a stage of 1, 2, or 3`);
+    }
+  }
   if (stats.element === undefined) return { ...stats, element: null };
   if (stats.element !== null && !isElement(stats.element)) {
     throw new Error(`enemies.json: "${kind}": unknown element "${String(stats.element)}"`);

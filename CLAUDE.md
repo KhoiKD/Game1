@@ -96,9 +96,13 @@ Rules:
 - Pressing nothing in time defeats it normally (loot drop, no spirit). Capturing is guaranteed if the window is met; no RNG. The risk is positioning and timing under fire.
 - A captured spirit is added to the player's collection and, when equipped in a spirit slot, **adds perks to the character's fighting mechanics**: stat bonuses, on-hit/on-kill effects, movement upgrades, and the creature's signature ability (from `creatures.json`) usable on right click. Elemental affinity boosts matching weapons.
 - **Bosses can be captured.** A boss uses the same flow (deplete health, then capture within the window) with a shorter window (default 2s). Boss spirits grant the **largest perks relative to the level of the stage they come from**: perk magnitudes use a boss multiplier on top of the normal formula (see Stat balancing), and scale with the stage's level so a boss spirit is always the strongest option available at that point in the game. Bosses are drawn from the 150-creature roster (typically stage-3 forms of rare, epic, or legendary families).
-- **Spirit slots grow by attunement.** Every capture counts toward an attunement track for the captured creature's element (dual-element creatures count toward both). Reaching a threshold unlocks an additional spirit slot that accepts that element. Start with 2 universal slots. Default thresholds per element: 5, 15, and 30 captures (3 bonus slots per element, capped by `balance.json`). Interpretation: "spirit type" = element; change in `balance.json` if you meant species.
+- **Spirit slots grow by attunement to an element.** Every capture counts toward an attunement track for the captured creature's element (dual-element creatures count toward both). Reaching a threshold unlocks an additional spirit slot that accepts that element. Start with 2 universal slots. Thresholds per element: 5, 15, and 30 captures (3 bonus slots per element, set in `balance.json`).
 - Equipped spirits can be swapped at checkpoints and in the hub, not mid-fight.
 - Capturing a creature you already own does not add a second copy; it grows the existing spirit (see below).
+- **Implementation:** an enemy is a creature when its `enemies.json` entry has `creature: { family, stage }`; its element must be that family's first element (a test enforces this). `LevelScene.weaken` starts the capture window, `tryCapture` handles F, and a captured creature leaves no loot. Collection logic is pure in `systems/spirits.ts`; every change goes through `LevelScene.applySpirits`.
+- **Perks from stats** (`balance.json` `perks`): Power raises weapon damage, Vitality raises max health, Agility raises move speed and shortens reloads, Focus raises crit chance and shortens the ability cooldown. Stats of all equipped spirits are summed. Weapons matching an equipped spirit's element deal 10% more.
+- **Abilities:** right click uses the ability of the spirit in the first slot. The effect comes from the creature's role via `balance.json` `abilities.byRole`: burst, bolt, shield, heal, or field. The name shown is the creature's own ability name.
+- **Screen:** C opens the spirits screen. Outside the swap range of the active checkpoint it is read-only.
 - Spirits captured after the last checkpoint are lost on death (see death penalty).
 
 **Growth**
@@ -114,9 +118,9 @@ Rules:
 - Starting values (tune by playtest and simulation tests):
   - **Rarity:** common 1.00, uncommon 1.10, rare 1.25, epic 1.45, legendary 1.70
   - **Stage:** stage 1 = 1.0, stage 2 = 1.6, stage 3 = 2.4
-  - **Element tilt** (a bias, not a power difference; each element's tilts sum to the same total): Ember favors Power; Tide favors Vitality and sustain; Volt favors Agility and fire rate; Verdant favors Vitality and defense; Umbra favors Focus, crit, and lifesteal; Gale favors Agility and mobility.
+  - **Element tilt** (a bias, not a power difference; each element's tilts sum to the same total; the favored stat is 1.15x, the rest about 0.95x): Ember favors Power; Tide favors Vitality and sustain; Volt favors Agility and fire rate; Verdant favors Vitality and defense; Umbra favors Focus, crit, and lifesteal; Gale favors Agility and mobility.
   - **Role base:** each role (Tank, Striker, Support, Skirmisher, etc.) defines a base distribution across the four stats.
-- Add a Vitest simulation that computes all 150 creatures and fails if any one's total stat budget deviates beyond a set band from its rarity-and-stage target, or if any single element or role dominates.
+- `tests/spirits.test.ts` simulates all 150 creatures and fails if any one's total stat budget is more than 10% from its rarity-and-stage target, or if any element or role averages more than 6% off. Re-run it after changing `roleBase` or `elementTilt`.
 
 ## Loot & Progression
 - Drops: enemies, chests, bosses, secrets. Seeded RNG; drop tables in `data/drops.json`.
@@ -133,7 +137,7 @@ Rules:
 4. (done) Weapon data model and archetypes loaded from JSON. All seven archetypes are playable; firing logic is a pure state machine in `systems/weapon.ts`. Until loot exists, the player carries the `starterLoadout` from `weapons.json` (one weapon per archetype). Elements are labels only until milestone 6.
 5. (done) Loot drops, inventory UI, perk rolling (with Vitest coverage). Enemies drop weapons from `drops.json` tables; rarity sets perk slots and the damage roll; perks come from `perks.json`. The player starts with two starter weapons, carries up to 20, and equips 3. Perks are stat modifiers only; on-hit and on-kill perks come with milestone 6.
 6. (done) Element system and status effects. Six-element wheel, damage formula with crits, six statuses applied by build-up, enemy elements with a pip above each enemy, floating damage numbers. Weapon stats gained `critChance`, `statusBuildup`, and `killRefund`, with perks for each. Statuses affect enemies only; the player cannot be afflicted yet.
-7. Spirit capture, equipped-spirit perks and abilities, evolution, stat balancing formula and simulation test.
+7. (done) Spirit capture, equipped-spirit perks and abilities, evolution, stat balancing formula and simulation test. Creatures are weakened at zero health and captured with F; spirits give stat perks, elemental affinity, and a right-click ability; element slots unlock by attunement; the balance simulation covers all 150 creatures. Abilities are five generic effects chosen by role, not yet the unique ability each creature's text describes.
 8. Classes, hub, progression, save/load.
 9. Content pass: 3 stages, 6 enemy types, 3 bosses, 20 weapons, first 12 creature families (36 creatures) fully implemented. Remaining families added in batches by element.
 10. Audio, polish, performance, deploy.
@@ -150,7 +154,8 @@ Rules:
 - Save data is versioned (`SAVE_VERSION` in `systems/save.ts`). Changing its shape means bumping the version and adding a migration case.
 - Dev shortcut: F9 clears the save and restarts the level.
 - Read one-shot key presses (swap, reload) from `keydown-<KEY>` events, not `JustDown` polling, which misses taps shorter than a frame.
-- Overlay screens (inventory) are their own scene launched over the paused level; they hand their result back through an `onClose` callback. All inventory changes in the level go through `applyInventory`.
+- Read clicks from `pointerdown` events for the same reason.
+- Overlay screens (inventory, spirits) are their own scene launched over the paused level; they hand their result back through an `onClose` callback. All inventory changes in the level go through `applyInventory`.
 
 ## Art Direction
 - **Look:** "pixel-grid vector." Sprites read as 32px-scale pixel art (chunky silhouettes, limited palette per sprite, hard-edged shapes snapped to a 32px grid) but carry vector-level detail: crisp anti-aliased edges, smooth gradients and rim lighting, fine line details, subtle glow on elemental effects.
@@ -183,13 +188,13 @@ Rules:
 - Checkpoint-based progression; no permadeath. Death rolls back all items, weapon advancements, and captured spirits gained since the last checkpoint.
 - Capture: deplete a creature's health, then press the Capture button within the window to take its spirit; spirits add perks to the player's fighting mechanics.
 - Bosses are capturable and give the largest perks relative to the level of their stage.
-- Spirit slots grow by capturing creatures of the same type (element attunement thresholds).
+- Spirit slots grow by capturing creatures of the same element (attunement thresholds), not the same species.
 - Spirit growth from a capture scales with the captured creature's rarity and evolution stage.
 - Stat balancing: formula by rarity, evolution stage, and element, driven by `balance.json`.
 - Art: 32px-grid pixel look with vector-level detail (see Art Direction).
 - Roster: 150 creatures (50 families x 3 stages) based on real fauna/flora.
 
 ## Open Questions (decide early)
-- Is "spirit type" for slot growth the element (current default) or the species?
-- Attunement thresholds, max slot cap, and whether bosses need a special capture condition beyond the shorter window.
+- Attunement thresholds (5, 15, 30) and whether bosses need a special capture condition beyond the shorter window.
+- Whether each creature should get its own unique ability, or keep the five role-based effects.
 - Mobile/touch support (currently out of scope).

@@ -34,6 +34,7 @@ const validSave = {
   secured: ['a', 'b'],
   defeated: ['enemy-01'],
   inventory: { items: [weapon('a')], equipped: ['a', null, null] },
+  spirits: { spirits: [], equipped: {}, captures: {} },
 };
 
 describe('serializeRun / restoreRun', () => {
@@ -67,12 +68,12 @@ describe('parseSave', () => {
 
   it('migrates a version 1 save by adding an empty defeated list', () => {
     const v1 = { version: 1, levelId: 'level1', checkpointId: 'cp-1', checkpointOrder: 1, secured: ['a'] };
-    expect(parseSave(JSON.stringify(v1))).toEqual({ ...v1, version: SAVE_VERSION, defeated: [], inventory: null });
+    expect(parseSave(JSON.stringify(v1))).toEqual({ ...v1, version: SAVE_VERSION, defeated: [], inventory: null, spirits: null });
   });
 
   it('migrates a version 2 save by adding an empty inventory slot', () => {
     const v2 = { version: 2, levelId: 'level1', checkpointId: 'cp-1', checkpointOrder: 1, secured: [], defeated: ['e'] };
-    expect(parseSave(JSON.stringify(v2))).toEqual({ ...v2, version: SAVE_VERSION, inventory: null });
+    expect(parseSave(JSON.stringify(v2))).toEqual({ ...v2, version: SAVE_VERSION, inventory: null, spirits: null });
   });
 
   it('uses the fallback inventory when a migrated save has none', () => {

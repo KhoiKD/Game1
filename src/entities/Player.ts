@@ -11,6 +11,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private readonly keys: Keys;
   private readonly gun: Phaser.GameObjects.Image;
   private lastGroundedAt = -Infinity;
+  /** Movement speed multiplier from equipped spirits. */
+  speedMult = 1;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'player');
@@ -56,7 +58,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Horizontal: instant speed for tight run-and-gun control.
     const left = k.left.isDown || k.leftArrow.isDown;
     const right = k.right.isDown || k.rightArrow.isDown;
-    this.setVelocityX(((right ? 1 : 0) - (left ? 1 : 0)) * MOVE_SPEED);
+    this.setVelocityX(((right ? 1 : 0) - (left ? 1 : 0)) * MOVE_SPEED * this.speedMult);
 
     // Jump with coyote time and variable height.
     if (body.blocked.down) this.lastGroundedAt = time;

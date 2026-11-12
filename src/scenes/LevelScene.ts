@@ -9,6 +9,7 @@ import {
   PLAYER_IFRAMES_MS,
   PLAYER_MAX_HP,
 } from '../config';
+import { balance, creatureName, findFamily, getFamily } from '../data/creatureData';
 import { elementRules } from '../data/elementData';
 import { getBossStats, getEnemyStats } from '../data/enemyData';
 import { resolveWeaponInstance, rollDropFor, sanitizeInventory, starterInventory } from '../data/lootData';
@@ -41,7 +42,9 @@ import {
   secureAll,
   securedCount,
   setInventory,
+  setSpirits,
   unsecuredCount,
+  unsecuredSpiritCount,
   unsecuredWeaponCount,
   type RunState,
 } from '../systems/runState';
@@ -57,16 +60,37 @@ import {
   type WeaponState,
 } from '../systems/weapon';
 import { aimAngle, type Vec2 } from '../util/aim';
+import {
+  NO_BONUSES,
+  activeAbility,
+  addKillXp,
+  applyBonuses,
+  bossPerkMult,
+  captureSpirit,
+  equippedSpirits,
+  levelOf,
+  playerBonuses,
+  sanitizeCollection,
+  spiritName,
+  type ActiveAbility,
+  type PlayerBonuses,
+  type SpiritCollection,
+} from '../systems/spirits';
 import { activeStatuses, addBuildup, tickStatus } from '../systems/status';
 import { ELEMENT_COLOR, STATUS_COLOR, css } from '../ui/elementColors';
 import { capitalize } from '../ui/rarity';
 import { createRng, type Rng } from '../util/rng';
 import type { InventorySceneData } from './InventoryScene';
+import type { SpiritsSceneData } from './SpiritsScene';
 
 const LEVEL_ID = 'level1';
 const FALL_MARGIN = 96; // how far below the map the player may fall before dying
 const PLAYER_HALF_HEIGHT = 32;
 const BOSS_BAR_WIDTH = 520;
+/** Difficulty level of this stage; boss spirits scale with it. */
+const STAGE_LEVEL = 1;
+/** How close to the active checkpoint the player must stand to swap spirits. */
+const CHECKPOINT_SWAP_RANGE = 96;
 
 interface HitOptions {
   crit: boolean;
@@ -79,6 +103,10 @@ const DIRECT_HIT: HitOptions = { crit: true, arc: true, buildup: true };
 const STATUS_DAMAGE: HitOptions = { crit: false, arc: false, buildup: false };
 const BURN_HIT: HitProfile = { damage: 0, element: 'Ember', critChance: 0, statusBuildup: 0, killRefund: 0, sourceUid: null };
 const ARC_HIT: HitProfile = { ...BURN_HIT, element: 'Volt' };
+/** Base for spirit abilities; the ability fills in damage and element. */
+const ABILITY_HIT: HitProfile = { ...BURN_HIT, statusBuildup: 1 };
+/** An ability that exists to inflict a status: builds up, but does not crit or chain. */
+const FIELD_HIT: HitOptions = { crit: false, arc: false, buildup: true };
 
 interface GroundLoot {
   sprite: Phaser.GameObjects.Image;
@@ -109,6 +137,17 @@ export class LevelScene extends Phaser.Scene {
   private weaponUids: string[] = [];
   private groundLoot: GroundLoot[] = [];
   private stageCleared = false;
+  /** Perks from the equipped spirits, applied to weapons, speed, and health. */
+  private bonuses: PlayerBonuses = NO_BONUSES;
+  private ability: ActiveAbility | null = null;
+  private abilityReadyAt = 0;
+  /** Clicks queued by pointer events, so a tap shorter than one frame still counts. */
+  private pendingFire = false;
+  private pendingAbility = false;
+  private spiritHud!: Phaser.GameObjects.Text;
+  private spiritHudText = '';
+  private captureGfx!: Phaser.GameObjects.Graphics;
+  private capturePrompt!: Phaser.GameObjects.Text;
   private weaponIndex = 0;
   private weaponHud!: Phaser.GameObjects.Text;
   private weaponHudText = '';
@@ -137,6 +176,10 @@ export class LevelScene extends Phaser.Scene {
     this.weaponIndex = 0;
     this.groundLoot = [];
     this.stageCleared = false;
+    this.abilityReadyAt = 0;
+    this.pendingFire = false;
+    this.pendingAbility = false;
+    this.spiritHudText = '';
     this.weaponHudText = '';
     this.pendingSwap = 0;
     this.pendingReload = false;
@@ -160,12 +203,14 @@ export class LevelScene extends Phaser.Scene {
     this.level = parseLevelObjects(rawObjects);
 
     this.run = this.initialRunState();
+    this.refreshBonuses(true);
     this.rebuildLoadout(true);
-    this.health = createHealth(PLAYER_MAX_HP);
+    this.health = createHealth(PLAYER_MAX_HP + this.bonuses.maxHpBonus);
     this.spawnCheckpointsAndPickups();
 
     const start = this.respawnPoint();
     this.player = new Player(this, start.x, start.y);
+    this.player.speedMult = this.bonuses.moveSpeedMult;
     this.physics.add.collider(this.player, ground);
     camera.startFollow(this.player, true, 0.12, 0.12);
     camera.centerOn(start.x, start.y);
@@ -202,7 +247,7 @@ export class LevelScene extends Phaser.Scene {
     this.physics.add.overlap(this.bullets, this.enemies, (a, b) => this.onBulletHitsEnemy(a, b));
     this.physics.add.overlap(this.player, this.enemies, (a, b) => {
       const enemy = a instanceof Enemy ? a : b instanceof Enemy ? b : null;
-      if (enemy?.active) this.damagePlayer(enemy.contactDamage);
+      if (enemy?.active && !enemy.isWeakened) this.damagePlayer(enemy.contactDamage);
     });
     this.physics.add.overlap(this.player, this.enemyBullets, (a, b) => {
       const bullet = a instanceof Bullet ? a : b instanceof Bullet ? b : null;
@@ -230,6 +275,12 @@ export class LevelScene extends Phaser.Scene {
     onPress('Q', () => (this.pendingSwap -= 1));
     onPress('R', () => (this.pendingReload = true));
     onPress('I', () => this.openInventory());
+    onPress('C', () => this.openSpirits());
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (pointer.button === 2) this.pendingAbility = true;
+      else if (pointer.button === 0) this.pendingFire = true;
+    });
+    onPress('F', () => this.tryCapture());
     keyboard.addCapture('TAB');
     onPress('TAB', () => this.openInventory());
 
@@ -258,13 +309,18 @@ export class LevelScene extends Phaser.Scene {
     // Blink while invulnerable so the i-frames are readable.
     this.player.setAlpha(isInvulnerable(this.health, time) && Math.floor(time / 80) % 2 === 0 ? 0.35 : 1);
 
-    this.tickWeapon(time, pointer.leftButtonDown(), target);
+    this.tickWeapon(time, pointer.leftButtonDown() || this.pendingFire, target);
+    this.pendingFire = false;
+    if (this.pendingAbility) this.useAbility(time, target);
+    this.pendingAbility = false;
 
     this.tickEnemies(time);
     this.checkCheckpoints();
     this.checkPickups();
     this.checkLoot();
     this.refreshBossBar();
+    this.drawCapturePrompts(time);
+    this.refreshSpiritHud(time);
     if (this.player.y > this.mapHeightPx + FALL_MARGIN) this.handleDeath();
   }
 
@@ -281,7 +337,8 @@ export class LevelScene extends Phaser.Scene {
     // A save can refer to weapons or perks that have since been removed from the data.
     const restored = restoreRun(save, starter);
     const inventory = sanitizeInventory(restored.inventory);
-    return { ...restored, inventory, securedInventory: inventory };
+    const spirits = sanitizeCollection(restored.spirits, findFamily);
+    return { ...restored, inventory, securedInventory: inventory, spirits, securedSpirits: spirits };
   }
 
   private persist(): void {
@@ -377,6 +434,12 @@ export class LevelScene extends Phaser.Scene {
     for (const child of [...this.enemies.getChildren()]) {
       const enemy = child as Enemy;
       if (!enemy.active) continue;
+      if (enemy.isWeakened) {
+        // The capture window closed: it is defeated the ordinary way and drops loot.
+        if (time >= enemy.weakenedUntil) this.defeat(enemy);
+        else enemy.tick(ctx);
+        continue;
+      }
       const ticked = tickStatus(enemy.status, time, elementRules);
       enemy.status = ticked.state;
       if (ticked.burnDamage > 0) {
@@ -397,6 +460,7 @@ export class LevelScene extends Phaser.Scene {
     const bullet = a instanceof Bullet ? a : b instanceof Bullet ? b : null;
     const enemy = a instanceof Enemy ? a : b instanceof Enemy ? b : null;
     if (!bullet || !enemy || !bullet.active || !enemy.active) return;
+    if (enemy.isWeakened) return; // shots pass through a creature waiting to be captured
     // A piercing shot overlaps the same enemy for several frames; hit it once.
     if (!bullet.registerHit(enemy.enemyId)) return;
     if (bullet.blastRadius > 0) {
@@ -460,7 +524,8 @@ export class LevelScene extends Phaser.Scene {
 
     if (defeated) {
       this.refundAmmo(hit);
-      this.defeat(enemy);
+      if (enemy.creature) this.weaken(enemy);
+      else this.defeat(enemy);
     }
   }
 
@@ -515,9 +580,225 @@ export class LevelScene extends Phaser.Scene {
     this.tweens.add({ targets: flash, alpha: 0, duration: 180, onComplete: () => flash.destroy() });
   }
 
-  private defeat(enemy: Enemy): void {
+  /** Zero health: a capturable creature staggers for its capture window instead of dying. */
+  private weaken(enemy: Enemy): void {
+    const time = this.time.now;
+    const isBoss = enemy === this.boss;
+    const rarity = enemy.creature ? getFamily(enemy.creature.family).rarity : 'common';
+    const windowMs = isBoss ? balance.capture.bossWindowMs : balance.capture.windowMs[rarity];
+    enemy.weaken(time, time + windowMs);
+    if (isBoss) this.killAll(this.enemyBullets);
+    this.floatText(enemy.x, enemy.y - enemy.height / 2 - 24, 'WEAKENED', '#ffffff', 14);
+  }
+
+  /** F: capture the nearest weakened creature in range. */
+  private tryCapture(): void {
+    const target = this.captureTarget();
+    if (!target || !target.inRange) return;
+    const enemy = target.enemy;
+    const ref = enemy.creature;
+    if (!ref) return;
+    const family = getFamily(ref.family);
+    const perkMult = enemy === this.boss ? bossPerkMult(STAGE_LEVEL, balance) : 1;
+    const result = captureSpirit(this.run.spirits, family, ref.stage, perkMult, balance);
+    this.applySpirits(result.collection);
+
+    const name = creatureName(ref);
+    const parts = [result.isNew ? `Captured ${name}` : `Captured ${name} · your spirit grew`];
+    if (result.evolved) parts.push('it evolved');
+    for (const element of result.slotsUnlocked) parts.push(`new ${element} slot`);
+    this.toast(parts.join(' · '));
+    this.floatText(enemy.x, enemy.y - enemy.height / 2 - 24, 'CAPTURED', css(ELEMENT_COLOR[family.elements[0]!]), 16);
+    // A captured creature leaves its spirit instead of loot.
+    this.defeat(enemy, false);
+  }
+
+  /** The nearest weakened creature and whether the player is close enough to capture it. */
+  private captureTarget(): { enemy: Enemy; inRange: boolean } | null {
+    let best: { enemy: Enemy; distance: number } | null = null;
+    for (const child of this.enemies.getChildren()) {
+      const enemy = child as Enemy;
+      if (!enemy.active || !enemy.isWeakened) continue;
+      const distance = Math.hypot(enemy.x - this.player.x, enemy.y - this.player.y);
+      if (!best || distance < best.distance) best = { enemy, distance };
+    }
+    if (!best) return null;
+    const range = best.enemy === this.boss ? balance.capture.bossRange : balance.capture.range;
+    return { enemy: best.enemy, inRange: best.distance <= range };
+  }
+
+  private drawCapturePrompts(time: number): void {
+    this.captureGfx.clear();
+    for (const child of this.enemies.getChildren()) {
+      const enemy = child as Enemy;
+      if (!enemy.active || !enemy.isWeakened) continue;
+      const width = Math.max(36, enemy.width);
+      const x = enemy.x - width / 2;
+      const y = enemy.y - enemy.height / 2 - 22;
+      this.captureGfx.fillStyle(0x2a3042).fillRect(x, y, width, 4);
+      this.captureGfx.fillStyle(0xffffff).fillRect(x, y, width * enemy.captureWindowLeft(time), 4);
+    }
+    const target = this.captureTarget();
+    if (!target || !target.enemy.creature) {
+      this.capturePrompt.setVisible(false);
+      return;
+    }
+    const { enemy, inRange } = target;
+    this.capturePrompt
+      .setText(inRange ? `F  capture ${creatureName(target.enemy.creature)}` : 'Get closer to capture')
+      .setColor(inRange ? '#ffffff' : '#9aa4bf')
+      .setPosition(enemy.x, enemy.y - enemy.height / 2 - 38)
+      .setVisible(true);
+  }
+
+  // ---- spirits -----------------------------------------------------------
+
+  /** Every change to the spirit collection goes through here. */
+  private applySpirits(spirits: SpiritCollection): void {
+    if (spirits === this.run.spirits) return;
+    this.run = setSpirits(this.run, spirits);
+    if (this.stageCleared) {
+      this.run = secureAll(this.run);
+      this.persist();
+    }
+    this.refreshBonuses(false);
+    this.refreshHud();
+  }
+
+  /** Recomputes what the equipped spirits give and applies it to speed, health, and weapons. */
+  private refreshBonuses(force: boolean): void {
+    const next = playerBonuses(this.run.spirits, findFamily, balance);
+    this.ability = activeAbility(this.run.spirits, findFamily, balance);
+    this.spiritHudText = '';
+    if (!force && JSON.stringify(next) === JSON.stringify(this.bonuses)) return;
+    const hpGain = next.maxHpBonus - this.bonuses.maxHpBonus;
+    this.bonuses = next;
+    if (force) return; // the caller sets up health and weapons itself
+    this.player.speedMult = next.moveSpeedMult;
+    const max = PLAYER_MAX_HP + next.maxHpBonus;
+    this.health = { ...this.health, max, hp: Math.min(max, this.health.hp + Math.max(0, hpGain)) };
+    this.rebuildLoadout(false);
+  }
+
+  /** Equipped spirits grow a little with every kill. */
+  private grantKillXp(): void {
+    const result = addKillXp(this.run.spirits, findFamily, balance);
+    this.applySpirits(result.collection);
+    for (const name of result.evolved) this.toast(`Your spirit evolved into ${name}`);
+  }
+
+  private openSpirits(): void {
+    if (this.scene.isActive('Spirits') || this.scene.isActive('Inventory')) return;
+    const data: SpiritsSceneData = {
+      spirits: this.run.spirits,
+      canEquip: this.canSwapSpirits(),
+      onClose: (spirits) => {
+        this.input.setDefaultCursor('none');
+        this.applySpirits(spirits);
+        this.pendingSwap = 0;
+        this.pendingReload = false;
+        this.pendingFire = false;
+        this.pendingAbility = false;
+        this.scene.resume();
+      },
+    };
+    this.scene.launch('Spirits', data);
+    this.scene.pause();
+  }
+
+  /** Spirits are swapped at a checkpoint, not mid-fight. After the stage is cleared, anywhere. */
+  private canSwapSpirits(): boolean {
+    if (this.stageCleared) return true;
+    const cp = this.level.checkpoints.find((c) => c.id === this.run.checkpointId);
+    return cp !== undefined && Math.abs(this.player.x - (cp.rect.x + cp.rect.width / 2)) <= CHECKPOINT_SWAP_RANGE;
+  }
+
+  /** Right click: the signature ability of the spirit in the first slot. */
+  private useAbility(time: number, target: Vec2): void {
+    const ability = this.ability;
+    if (!ability || time < this.abilityReadyAt) return;
+    this.abilityReadyAt = time + ability.cooldownMs;
+    const rules = balance.abilities;
+    const color = ELEMENT_COLOR[ability.element];
+    const hit: HitProfile = { ...ABILITY_HIT, element: ability.element };
+    const enemiesNear = (x: number, y: number, radius: number): Enemy[] =>
+      ([...this.enemies.getChildren()] as Enemy[]).filter(
+        (enemy) => enemy.active && Math.hypot(enemy.x - x, enemy.y - y) <= radius + Math.max(enemy.width, enemy.height) / 2,
+      );
+    const flash = (x: number, y: number, radius: number): void => {
+      const ring = this.add.graphics().setDepth(4);
+      ring.fillStyle(color, 0.35).fillCircle(x, y, radius);
+      this.tweens.add({ targets: ring, alpha: 0, duration: 260, onComplete: () => ring.destroy() });
+    };
+
+    switch (ability.effect) {
+      case 'burst': {
+        const damage = ability.stats.power * rules.burst.damagePerPower;
+        flash(this.player.x, this.player.y, rules.burst.radius);
+        for (const enemy of enemiesNear(this.player.x, this.player.y, rules.burst.radius)) {
+          this.hitEnemy(enemy, { ...hit, damage }, STATUS_DAMAGE);
+        }
+        break;
+      }
+      case 'bolt': {
+        const origin = this.player.weaponPivot;
+        const angle = aimAngle(origin, target);
+        const dir = { x: Math.cos(angle), y: Math.sin(angle) };
+        const bullet = this.bullets.get(origin.x, origin.y) as Bullet | null;
+        bullet?.fire(origin.x + dir.x * MUZZLE_OFFSET, origin.y + dir.y * MUZZLE_OFFSET, dir, {
+          speed: rules.bolt.speed,
+          lifetimeMs: (rules.bolt.range / rules.bolt.speed) * 1000,
+          pierce: rules.bolt.pierce,
+          texture: 'charge-shot',
+          hit: { ...hit, damage: ability.stats.power * rules.bolt.damagePerPower },
+        });
+        break;
+      }
+      case 'shield': {
+        const durationMs = rules.shield.baseMs + ability.stats.vitality * rules.shield.msPerVitality;
+        this.health = { ...this.health, invulnerableUntil: Math.max(this.health.invulnerableUntil, time + durationMs) };
+        flash(this.player.x, this.player.y, 44);
+        break;
+      }
+      case 'heal': {
+        const amount = Math.max(1, Math.floor(rules.heal.baseHp + ability.stats.vitality * rules.heal.hpPerVitality));
+        this.health = { ...this.health, hp: Math.min(this.health.max, this.health.hp + amount) };
+        this.refreshHud();
+        flash(this.player.x, this.player.y, 44);
+        break;
+      }
+      case 'field': {
+        flash(target.x, target.y, rules.field.radius);
+        // Enough build-up to start the status on anything that is not immune.
+        const fieldHit: HitProfile = { ...hit, damage: rules.field.damage, statusBuildup: 1000 };
+        for (const enemy of enemiesNear(target.x, target.y, rules.field.radius)) {
+          this.hitEnemy(enemy, fieldHit, FIELD_HIT);
+        }
+        break;
+      }
+    }
+    this.floatText(this.player.x, this.player.y - 52, ability.name, css(color), 14);
+  }
+
+  private refreshSpiritHud(time: number): void {
+    const first = equippedSpirits(this.run.spirits, balance)[0];
+    let text = 'No spirit · weaken a creature, then press F beside it to capture';
+    if (first && this.ability) {
+      const family = getFamily(first.familyId);
+      const wait = Math.max(0, this.abilityReadyAt - time);
+      const ready = wait === 0 ? 'ready' : `${(wait / 1000).toFixed(1)}s`;
+      const count = equippedSpirits(this.run.spirits, balance).length;
+      text = `Spirit ${spiritName(first, family, balance)} Lv ${levelOf(first, balance)}${count > 1 ? ` +${count - 1}` : ''} · ${this.ability.name} (right click) ${ready}`;
+    }
+    if (text === this.spiritHudText) return;
+    this.spiritHudText = text;
+    this.spiritHud.setText(text).setColor(first ? '#e6ebf5' : '#586179');
+  }
+
+  private defeat(enemy: Enemy, dropLoot = true): void {
     this.run = defeatEnemy(this.run, enemy.enemyId);
-    this.dropLoot(enemy.kind, enemy.x, enemy.y);
+    if (dropLoot) this.dropLoot(enemy.kind, enemy.x, enemy.y);
+    this.grantKillXp();
     if (enemy === this.boss) {
       // Clearing the stage banks everything, so the win cannot be lost afterwards.
       const name = this.boss.displayName;
@@ -545,7 +826,9 @@ export class LevelScene extends Phaser.Scene {
   private handleDeath(): void {
     const lost = unsecuredCount(this.run);
     this.run = die(this.run);
-    this.health = refill(this.health);
+    this.refreshBonuses(true);
+    this.player.speedMult = this.bonuses.moveSpeedMult;
+    this.health = refill({ ...this.health, max: PLAYER_MAX_HP + this.bonuses.maxHpBonus });
     this.clearGroundLoot();
     this.rebuildLoadout(true);
     this.syncPickups();
@@ -635,7 +918,7 @@ export class LevelScene extends Phaser.Scene {
     if (!reset) this.weaponUids.forEach((uid, i) => previous.set(uid, this.weaponStates[i]!));
 
     const equipped = equippedItems(this.run.inventory);
-    this.weapons = equipped.map(resolveWeaponInstance);
+    this.weapons = equipped.map((item) => applyBonuses(resolveWeaponInstance(item), this.bonuses));
     this.weaponUids = equipped.map((item) => item.uid);
     this.weaponStates = this.weapons.map((weapon, i) => {
       const kept = previous.get(this.weaponUids[i]!);
@@ -647,7 +930,7 @@ export class LevelScene extends Phaser.Scene {
   }
 
   private openInventory(): void {
-    if (this.scene.isActive('Inventory')) return;
+    if (this.scene.isActive('Inventory') || this.scene.isActive('Spirits')) return;
     const data: InventorySceneData = {
       inventory: this.run.inventory,
       onClose: (inventory) => {
@@ -742,13 +1025,23 @@ export class LevelScene extends Phaser.Scene {
   private buildHud(): void {
     const style = { fontFamily: 'monospace', fontSize: '14px', color: '#9aa4bf' };
     this.add
-      .text(16, 12, 'A/D move · Space jump · Mouse aim · Click fire · R reload · Q/E swap · I inventory · F9 reset save', style)
+      .text(16, 12, 'A/D move · Space jump · Click fire · R reload · Q/E swap · F capture · Right click ability · I bag · C spirits', {
+        ...style,
+        fontSize: '13px',
+      })
       .setScrollFactor(0)
       .setDepth(100);
     this.hud = this.add.text(16, 34, '', style).setScrollFactor(0).setDepth(100);
     this.add.text(16, 56, 'HP', style).setScrollFactor(0).setDepth(100);
     this.healthPips = this.add.graphics().setScrollFactor(0).setDepth(100);
     this.weaponHud = this.add.text(16, 78, '', { ...style, color: '#e6ebf5' }).setScrollFactor(0).setDepth(100);
+    this.spiritHud = this.add.text(16, 100, '', style).setScrollFactor(0).setDepth(100);
+    this.captureGfx = this.add.graphics().setDepth(5);
+    this.capturePrompt = this.add
+      .text(0, 0, '', { ...style, color: '#ffffff', stroke: '#000000', strokeThickness: 3 })
+      .setOrigin(0.5)
+      .setDepth(51)
+      .setVisible(false);
     this.bossBar = this.add.graphics().setScrollFactor(0).setDepth(100);
     this.bossLabel = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT - 46, '', { ...style, color: '#ffffff' })
@@ -764,17 +1057,15 @@ export class LevelScene extends Phaser.Scene {
   private refreshHud(): void {
     const pickups = unsecuredCount(this.run);
     const weapons = unsecuredWeaponCount(this.run);
+    const spirits = unsecuredSpiritCount(this.run);
+    const plural = (count: number, word: string): string => (count > 0 ? `${count} ${word}${count === 1 ? '' : 's'}` : '');
     const atRisk =
-      pickups + weapons === 0
-        ? 'nothing'
-        : [pickups > 0 ? `${pickups} pickup${pickups === 1 ? '' : 's'}` : '', weapons > 0 ? `${weapons} weapon${weapons === 1 ? '' : 's'}` : '']
-            .filter(Boolean)
-            .join(', ');
+      [plural(pickups, 'pickup'), plural(weapons, 'weapon'), plural(spirits, 'spirit')].filter(Boolean).join(', ') || 'nothing';
     this.hud
       .setText(
         `Secured ${securedCount(this.run)}  ·  At risk: ${atRisk}  ·  Bag ${this.run.inventory.items.length}/${INVENTORY_CAPACITY}  ·  Checkpoint: ${this.run.checkpointId ?? 'start'}`,
       )
-      .setColor(pickups + weapons > 0 ? '#ffd166' : '#9aa4bf');
+      .setColor(pickups + weapons + spirits > 0 ? '#ffd166' : '#9aa4bf');
 
     this.healthPips.clear();
     for (let i = 0; i < this.health.max; i++) {
@@ -793,6 +1084,10 @@ export class LevelScene extends Phaser.Scene {
     const y = GAME_HEIGHT - 32;
     this.bossBar.fillStyle(0x2a3042).fillRect(x, y, BOSS_BAR_WIDTH, 12);
     this.bossBar.fillStyle(0xe4572e).fillRect(x, y, Math.round(BOSS_BAR_WIDTH * boss.hpFraction), 12);
+    if (boss.isWeakened) {
+      this.bossLabel.setText(`${boss.displayName} · WEAKENED · press F beside it to capture`);
+      return;
+    }
     const statuses = activeStatuses(boss.status, this.time.now).map((s) => s.toUpperCase());
     this.bossLabel.setText([`${boss.displayName} · Phase ${boss.phaseNumber}`, ...statuses].join(' · '));
   }

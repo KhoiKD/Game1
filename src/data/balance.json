@@ -1,0 +1,70 @@
+{
+  "roleBase": {
+    "Brawler":    { "power": 35, "vitality": 35, "agility": 15, "focus": 15 },
+    "Artillery":  { "power": 40, "vitality": 15, "agility": 15, "focus": 30 },
+    "Striker":    { "power": 45, "vitality": 15, "agility": 25, "focus": 15 },
+    "Support":    { "power": 15, "vitality": 35, "agility": 15, "focus": 35 },
+    "Skirmisher": { "power": 30, "vitality": 15, "agility": 40, "focus": 15 },
+    "Tank":       { "power": 15, "vitality": 55, "agility": 10, "focus": 20 },
+    "Swarm":      { "power": 35, "vitality": 20, "agility": 30, "focus": 15 },
+    "Trap":       { "power": 30, "vitality": 20, "agility": 10, "focus": 40 },
+    "Controller": { "power": 20, "vitality": 25, "agility": 15, "focus": 40 },
+    "Scout":      { "power": 20, "vitality": 15, "agility": 45, "focus": 20 },
+    "Counter":    { "power": 25, "vitality": 30, "agility": 20, "focus": 25 },
+    "Evader":     { "power": 15, "vitality": 20, "agility": 50, "focus": 15 },
+    "Drain":      { "power": 30, "vitality": 30, "agility": 10, "focus": 30 },
+    "Trickster":  { "power": 20, "vitality": 15, "agility": 30, "focus": 35 }
+  },
+  "rarityMult": { "common": 1, "uncommon": 1.1, "rare": 1.25, "epic": 1.45, "legendary": 1.7 },
+  "stageMult": [1, 1.6, 2.4],
+  "elementTilt": {
+    "Ember":   { "power": 1.15, "vitality": 0.95, "agility": 0.95, "focus": 0.95 },
+    "Tide":    { "power": 0.93, "vitality": 1.15, "agility": 0.95, "focus": 0.97 },
+    "Volt":    { "power": 0.97, "vitality": 0.93, "agility": 1.15, "focus": 0.95 },
+    "Verdant": { "power": 0.95, "vitality": 1.15, "agility": 0.93, "focus": 0.97 },
+    "Umbra":   { "power": 0.95, "vitality": 0.93, "agility": 0.97, "focus": 1.15 },
+    "Gale":    { "power": 0.95, "vitality": 0.95, "agility": 1.15, "focus": 0.95 }
+  },
+  "boss": { "perkMult": 1.5, "perStageLevel": 0.1 },
+  "growth": {
+    "base": 4,
+    "rarity": { "common": 1, "uncommon": 1.5, "rare": 2.5, "epic": 4, "legendary": 6 },
+    "stage": [1, 2, 4],
+    "perLevel": 4,
+    "killXp": 1,
+    "maxLevel": 50
+  },
+  "capture": {
+    "windowMs": { "common": 3000, "uncommon": 3300, "rare": 3600, "epic": 4000, "legendary": 4500 },
+    "bossWindowMs": 2000,
+    "range": 110,
+    "bossRange": 200
+  },
+  "slots": { "universal": 2, "attunementThresholds": [5, 15, 30] },
+  "perks": {
+    "damagePerPower": 0.001,
+    "hpPerVitality": 0.025,
+    "speedPerAgility": 0.0015,
+    "reloadPerAgility": 0.001,
+    "maxReloadReduction": 0.4,
+    "critPerFocus": 0.0005,
+    "cooldownPerFocus": 0.001,
+    "maxCooldownReduction": 0.5,
+    "affinityDamage": 0.1
+  },
+  "abilities": {
+    "cooldownMs": 8000,
+    "byRole": {
+      "Brawler": "burst", "Striker": "burst", "Swarm": "burst",
+      "Artillery": "bolt", "Skirmisher": "bolt", "Scout": "bolt", "Trickster": "bolt",
+      "Tank": "shield", "Counter": "shield", "Evader": "shield",
+      "Support": "heal", "Drain": "heal",
+      "Controller": "field", "Trap": "field"
+    },
+    "burst":  { "radius": 140, "damagePerPower": 0.12 },
+    "bolt":   { "damagePerPower": 0.2, "speed": 900, "range": 900, "pierce": 2 },
+    "shield": { "baseMs": 1200, "msPerVitality": 12 },
+    "heal":   { "baseHp": 1, "hpPerVitality": 0.01 },
+    "field":  { "radius": 130, "damage": 0.5 }
+  }
+}

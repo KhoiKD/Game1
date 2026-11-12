@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import type { CreatureRef } from '../data/creatureData';
 import { elementRules } from '../data/elementData';
 import type { EnemyDef } from '../level/parseLevelObjects';
 import type { Element } from '../systems/combat';
@@ -39,6 +40,8 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
   /** Key in enemies.json; also the name of this enemy's drop table. */
   readonly kind: string;
   readonly element: Element | null;
+  /** The creature this enemy is. Enemies with one are weakened at zero health and can be captured. */
+  readonly creature: CreatureRef | null;
   readonly maxHp: number;
   readonly contactDamage: number;
   hp: number;
@@ -48,6 +51,9 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
   mods: StatusModifiers = NO_MODIFIERS;
   protected statusScale: StatusScale = NORMAL_SCALE;
   private flashUntil = 0;
+  private readonly baseTexture: string;
+  private weakenedAt = 0;
+  private weakenedEnd: number | null = null;
   /** Element pip and status pips drawn above the enemy. */
   private readonly badge: Phaser.GameObjects.Graphics;
   private badgeKey = '';
@@ -57,12 +63,14 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
     scene: Phaser.Scene,
     def: EnemyDef,
     texture: string,
-    stats: { hp: number; contactDamage: number; element: Element | null },
+    stats: { hp: number; contactDamage: number; element: Element | null; creature?: CreatureRef },
   ) {
     super(scene, def.x, def.y, texture);
     this.enemyId = def.id;
     this.kind = def.kind;
     this.element = stats.element;
+    this.creature = stats.creature ?? null;
+    this.baseTexture = texture;
     this.maxHp = stats.hp;
     this.hp = stats.hp;
     this.contactDamage = stats.contactDamage;
@@ -87,6 +95,32 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
     return this.statusScale;
   }
 
+  /** True while the enemy sits at zero health waiting to be captured. */
+  get isWeakened(): boolean {
+    return this.weakenedEnd !== null;
+  }
+
+  /** When the capture window closes; only meaningful while weakened. */
+  get weakenedUntil(): number {
+    return this.weakenedEnd ?? 0;
+  }
+
+  /** Share of the capture window that is left, from 1 down to 0. */
+  captureWindowLeft(time: number): number {
+    if (this.weakenedEnd === null) return 0;
+    const total = this.weakenedEnd - this.weakenedAt;
+    return total <= 0 ? 0 : Math.min(1, Math.max(0, (this.weakenedEnd - time) / total));
+  }
+
+  /** Enters the weakened state: harmless and still until captured or the window closes. */
+  weaken(time: number, until: number): void {
+    this.weakenedAt = time;
+    this.weakenedEnd = until;
+    this.flashUntil = 0;
+    this.setTexture(this.baseTexture);
+    this.setVelocityX(0);
+  }
+
   /** Returns true when this hit defeated the enemy. */
   takeDamage(amount: number, time: number): boolean {
     if (this.hp <= 0) return false;
@@ -101,6 +135,13 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.flashUntil = 0;
       this.setAlpha(1);
     }
+    if (this.weakenedEnd !== null) {
+      // Staggered: no attacks, no movement, and a pulse so it reads as capturable.
+      this.setVelocityX(0);
+      this.setAlpha(0.55 + 0.3 * Math.sin(ctx.time / 80));
+      this.refreshBadge(ctx.time);
+      return;
+    }
     this.mods = statusModifiers(this.status, ctx.time, elementRules);
     this.act(ctx);
     this.refreshBadge(ctx.time);
@@ -108,7 +149,7 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   /** Called instead of tick() while the player is far away. */
   idle(): void {
-    this.setAlpha(1);
+    this.setAlpha(this.weakenedEnd !== null ? 0.6 : 1);
     this.setVelocityX(0);
     this.refreshBadge(this.scene.time.now);
   }
