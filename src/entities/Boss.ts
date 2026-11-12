@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import { elementRules } from '../data/elementData';
 import type { BossPhaseStats, BossStats } from '../data/enemyData';
 import type { EnemyDef } from '../level/parseLevelObjects';
 import { phaseIndex } from '../systems/bossPhase';
@@ -26,6 +27,11 @@ export class Boss extends Enemy {
     this.displayName = stats.name;
     this.homeX = def.x;
     this.arcadeBody.setCollideWorldBounds(true);
+    // Bosses need more build-up before a status takes hold and shake it off sooner.
+    this.statusScale = {
+      thresholdMult: elementRules.buildup.bossThresholdMult,
+      durationMult: elementRules.buildup.bossDurationMult,
+    };
   }
 
   get isAwake(): boolean {
@@ -66,7 +72,7 @@ export class Boss extends Enemy {
       if (ctx.time < this.attackingAt) return;
       this.attack(ctx, phase);
       this.attackingAt = null;
-      this.nextAttackAt = ctx.time + phase.cooldownMs;
+      this.nextAttackAt = ctx.time + phase.cooldownMs * this.mods.cooldownMult;
       this.setTexture('boss');
       return;
     }
@@ -90,7 +96,8 @@ export class Boss extends Enemy {
 
   private attack(ctx: EnemyContext, phase: BossPhaseStats): void {
     const from = { x: this.x, y: this.y - this.height / 4 };
-    const base = aimAngle(from, ctx.player);
+    // Blinded: the whole volley is aimed off by a random amount.
+    const base = aimAngle(from, ctx.player) + (ctx.rng() * 2 - 1) * this.mods.aimErrorRad;
     const spread = (phase.spreadDeg * Math.PI) / 180;
     for (let i = 0; i < phase.bullets; i++) {
       const angle = base + (i - (phase.bullets - 1) / 2) * spread;
@@ -98,7 +105,8 @@ export class Boss extends Enemy {
     }
 
     this.attackCount += 1;
-    if (phase.hop && this.attackCount % 2 === 0 && this.arcadeBody.blocked.down) this.hop(ctx);
+    const canHop = phase.hop && !this.mods.rooted && this.arcadeBody.blocked.down;
+    if (canHop && this.attackCount % 2 === 0) this.hop(ctx);
   }
 
   /** Hop toward the player, but turn back before leaving the leash around the arena. */
@@ -106,7 +114,7 @@ export class Boss extends Enemy {
     let direction = Math.sign(ctx.player.x - this.x) || 1;
     const landingX = this.x + direction * this.stats.hopSpeedX * 0.75;
     if (Math.abs(landingX - this.homeX) > this.stats.leash) direction = Math.sign(this.homeX - this.x) || 1;
-    this.setVelocity(direction * this.stats.hopSpeedX, -this.stats.hopSpeedY);
+    this.setVelocity(direction * this.stats.hopSpeedX * this.mods.speedMult, -this.stats.hopSpeedY);
     this.hopping = true;
   }
 }

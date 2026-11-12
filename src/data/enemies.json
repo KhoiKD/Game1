@@ -2,6 +2,7 @@
   "enemies": {
     "walker": {
       "behavior": "walker",
+      "element": "Verdant",
       "hp": 3,
       "contactDamage": 1,
       "speed": 70,
@@ -9,6 +10,7 @@
     },
     "turret": {
       "behavior": "turret",
+      "element": "Volt",
       "hp": 4,
       "contactDamage": 1,
       "range": 520,
@@ -21,6 +23,7 @@
     "komodrake": {
       "name": "Komodrake",
       "family": "ember-komodo",
+      "element": "Ember",
       "hp": 120,
       "contactDamage": 1,
       "activateRange": 560,

@@ -29,6 +29,16 @@
       "description": "8% faster fire rate",
       "mods": [{ "stat": "fireIntervalMs", "op": "mul", "value": 0.92 }] },
 
+    { "id": "scavenger", "name": "Scavenger", "slot": "magazine", "archetypes": ["*"],
+      "description": "Kills refund 20% of the magazine",
+      "mods": [{ "stat": "killRefund", "op": "add", "value": 0.2 }] },
+
+    { "id": "keen-edge", "name": "Keen Edge", "slot": "trait", "archetypes": ["*"],
+      "description": "+10% critical hit chance",
+      "mods": [{ "stat": "critChance", "op": "add", "value": 0.1 }] },
+    { "id": "saturating-rounds", "name": "Saturating Rounds", "slot": "trait", "archetypes": ["*"],
+      "description": "Status effects build 50% faster",
+      "mods": [{ "stat": "statusBuildup", "op": "mul", "value": 1.5 }] },
     { "id": "hair-trigger", "name": "Hair Trigger", "slot": "trait", "archetypes": ["*"],
       "description": "12% faster fire rate",
       "mods": [{ "stat": "fireIntervalMs", "op": "mul", "value": 0.88 }] },

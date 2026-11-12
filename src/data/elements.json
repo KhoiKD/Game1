@@ -1,0 +1,21 @@
+{
+  "elements": {
+    "Tide":    { "strongAgainst": "Ember",   "status": "soak" },
+    "Ember":   { "strongAgainst": "Verdant", "status": "burn" },
+    "Verdant": { "strongAgainst": "Volt",    "status": "root" },
+    "Volt":    { "strongAgainst": "Gale",    "status": "shock" },
+    "Gale":    { "strongAgainst": "Umbra",   "status": "slow" },
+    "Umbra":   { "strongAgainst": "Tide",    "status": "blind" }
+  },
+  "multipliers": { "strong": 1.5, "weak": 0.67, "neutral": 1 },
+  "critMultiplier": 1.5,
+  "statuses": {
+    "burn":  { "durationMs": 3000, "tickMs": 500, "tickDamage": 0.5 },
+    "soak":  { "durationMs": 4000, "damageTakenMult": 1.25 },
+    "shock": { "durationMs": 3000, "arcFraction": 0.3, "arcRadius": 150 },
+    "root":  { "durationMs": 2000 },
+    "blind": { "durationMs": 3000, "aimErrorDeg": 35 },
+    "slow":  { "durationMs": 3000, "speedMult": 0.5, "cooldownMult": 1.5 }
+  },
+  "buildup": { "threshold": 2, "bossThresholdMult": 5, "bossDurationMult": 0.5 }
+}

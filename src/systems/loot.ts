@@ -21,6 +21,7 @@ export type PerkSlot = (typeof PERK_SLOTS)[number];
 export const MODDABLE_STATS = [
   'fireIntervalMs', 'burstCount', 'chargeMs', 'damage', 'pellets', 'spreadDeg', 'projectileSpeed',
   'range', 'stability', 'reloadMs', 'magazine', 'handling', 'pierce', 'blastRadius',
+  'critChance', 'statusBuildup', 'killRefund',
 ] as const;
 export type ModdableStat = (typeof MODDABLE_STATS)[number];
 
@@ -69,6 +70,7 @@ export interface LootRules {
 
 const WHOLE_STATS: ReadonlySet<ModdableStat> = new Set(['magazine', 'pellets', 'burstCount', 'pierce']);
 const PERCENT_STATS: ReadonlySet<ModdableStat> = new Set(['stability', 'handling']);
+const FRACTION_STATS: ReadonlySet<ModdableStat> = new Set(['critChance', 'killRefund']);
 const MINIMUM: Partial<Record<ModdableStat, number>> = { magazine: 1, pellets: 1, burstCount: 1 };
 
 /** Applies perk modifiers in order, then keeps every stat in its valid range. */
@@ -86,6 +88,7 @@ export function applyPerks<T extends WeaponStats>(weapon: T, perks: readonly Per
     let value = stats[stat];
     if (WHOLE_STATS.has(stat)) value = Math.round(value);
     if (PERCENT_STATS.has(stat)) value = Math.min(100, value);
+    if (FRACTION_STATS.has(stat)) value = Math.min(1, value);
     (stats as WeaponStats)[stat] = Math.max(MINIMUM[stat] ?? 0, value);
   }
   return stats;

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
+import { elementRules } from '../data/elementData';
 import { getPerk, resolveWeaponInstance } from '../data/lootData';
 import type { ResolvedWeapon } from '../data/weaponData';
 import {
@@ -11,7 +12,9 @@ import {
   isEquipped,
   type Inventory,
 } from '../systems/inventory';
+import { matchups } from '../systems/combat';
 import type { WeaponInstance } from '../systems/loot';
+import { ELEMENT_COLOR, css } from '../ui/elementColors';
 import { capitalize, rarityCss } from '../ui/rarity';
 
 export interface InventorySceneData {
@@ -116,7 +119,7 @@ export class InventoryScene extends Phaser.Scene {
     const backpack = backpackItems(this.inventory);
     this.label(LEFT_X, 204, `BACKPACK  ${this.inventory.items.length}/${INVENTORY_CAPACITY} carried`, DIM, 13);
     if (backpack.length === 0) {
-      this.label(LEFT_X, 226, 'Nothing here yet. Defeated enemies sometimes drop weapons.', '#586179', 14);
+      this.label(LEFT_X, 226, 'Empty. Defeated enemies can drop weapons.', '#586179', 14);
     }
     backpack.forEach((item, index) => {
       const column = Math.floor(index / BACKPACK_ROWS);
@@ -139,22 +142,24 @@ export class InventoryScene extends Phaser.Scene {
     this.label(DETAIL_X, 84, weapon.name, rarityCss(item.rarity), 20);
     this.label(DETAIL_X, 112, `${capitalize(item.rarity)} · ${weapon.archetypeLabel} · ${weapon.element}`, DIM, 14);
 
-    let y = 146;
+    this.label(DETAIL_X, 132, elementLine(weapon), css(ELEMENT_COLOR[weapon.element]), 13);
+
+    let y = 158;
     for (const [name, value] of statLines(weapon)) {
-      this.label(DETAIL_X, y, name, DIM, 14);
-      this.label(DETAIL_X + 110, y, value, BRIGHT, 14);
-      y += 21;
+      this.label(DETAIL_X, y, name, DIM, 13);
+      this.label(DETAIL_X + 110, y, value, BRIGHT, 13);
+      y += 18;
     }
 
-    y += 10;
+    y += 8;
     this.label(DETAIL_X, y, 'PERKS', DIM, 13);
-    y += 22;
-    if (item.perks.length === 0) this.label(DETAIL_X, y, 'None', '#586179', 14);
+    y += 20;
+    if (item.perks.length === 0) this.label(DETAIL_X, y, 'None', '#586179', 13);
     for (const id of item.perks) {
       const perk = getPerk(id);
-      this.label(DETAIL_X, y, `${perk.name}`, BRIGHT, 14);
-      this.label(DETAIL_X + 130, y, perk.description, DIM, 14);
-      y += 21;
+      this.label(DETAIL_X, y, `${perk.name}`, BRIGHT, 13);
+      this.label(DETAIL_X + 150, y, perk.description, DIM, 13);
+      y += 18;
     }
 
     const buttonY = GAME_HEIGHT - 62;
@@ -196,6 +201,14 @@ export class InventoryScene extends Phaser.Scene {
 
 const round = (value: number, digits = 1): string => String(Number(value.toFixed(digits)));
 
+/** What the weapon's element is good and bad against, and the status it builds. */
+export function elementLine(weapon: ResolvedWeapon): string {
+  if (weapon.element === 'kinetic') return 'Kinetic: neutral against everything, no status';
+  const { strongAgainst, weakAgainst } = matchups(weapon.element, elementRules);
+  const status = elementRules.elements[weapon.element].status;
+  return `Strong vs ${strongAgainst} · weak vs ${weakAgainst} · builds ${status}`;
+}
+
 /** Player-facing stat lines for the details panel. */
 export function statLines(weapon: ResolvedWeapon): Array<[string, string]> {
   const isBurst = weapon.trigger === 'burst' || weapon.trigger === 'semi-burst';
@@ -210,9 +223,11 @@ export function statLines(weapon: ResolvedWeapon): Array<[string, string]> {
     ['Reload', `${round(weapon.reloadMs / 1000, 2)}s`],
     ['Magazine', `${weapon.magazine}`],
     ['Handling', `${Math.round(weapon.handling)}`],
+    ['Crit chance', `${Math.round(weapon.critChance * 100)}%`],
   ];
   if (weapon.pierce > 0) lines.push(['Pierce', weapon.pierce >= 99 ? 'all enemies' : `+${weapon.pierce}`]);
   if (weapon.blastRadius > 0) lines.push(['Blast', `${Math.round(weapon.blastRadius)}`]);
   if (weapon.trigger === 'charge') lines.push(['Charge', `${round(weapon.chargeMs / 1000, 2)}s`]);
+  if (weapon.killRefund > 0) lines.push(['Kill refund', `${Math.round(weapon.killRefund * 100)}% of magazine`]);
   return lines;
 }

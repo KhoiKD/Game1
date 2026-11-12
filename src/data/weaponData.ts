@@ -54,6 +54,12 @@ export interface WeaponStats {
   gravity: number;
   /** Greater than 0 makes the projectile explode on impact. */
   blastRadius: number;
+  /** Chance from 0 to 1 that a hit is critical. */
+  critChance: number;
+  /** Multiplies how fast hits fill a target's status meter. */
+  statusBuildup: number;
+  /** Share of the magazine (0 to 1) refunded when a hit defeats an enemy. */
+  killRefund: number;
   /** Texture key for the projectile. */
   projectile: string;
 }
@@ -90,6 +96,7 @@ export interface ResolvedWeapon extends WeaponStats {
 const NUMERIC_STATS = [
   'fireIntervalMs', 'burstCount', 'burstIntervalMs', 'chargeMs', 'damage', 'pellets', 'spreadDeg',
   'projectileSpeed', 'range', 'stability', 'reloadMs', 'magazine', 'handling', 'pierce', 'gravity', 'blastRadius',
+  'critChance', 'statusBuildup', 'killRefund',
 ] as const;
 
 function checkStats(stats: WeaponStats, where: string): void {
@@ -110,6 +117,9 @@ function checkStats(stats: WeaponStats, where: string): void {
   }
   for (const key of ['stability', 'handling'] as const) {
     if (stats[key] > 100) fail(`"${key}" must be between 0 and 100`);
+  }
+  for (const key of ['critChance', 'killRefund'] as const) {
+    if (stats[key] > 1) fail(`"${key}" must be between 0 and 1`);
   }
   const isBurst = stats.trigger === 'burst' || stats.trigger === 'semi-burst';
   if (isBurst && stats.burstCount < 2) fail('a burst weapon needs burstCount >= 2');

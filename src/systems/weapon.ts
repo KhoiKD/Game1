@@ -1,4 +1,4 @@
-import type { ResolvedWeapon } from '../data/weaponData';
+import type { ResolvedWeapon, WeaponElement } from '../data/weaponData';
 import type { Rng } from '../util/rng';
 
 /**
@@ -35,6 +35,10 @@ export interface Shot {
   gravity: number;
   blastRadius: number;
   texture: string;
+  element: WeaponElement;
+  critChance: number;
+  statusBuildup: number;
+  killRefund: number;
 }
 
 export interface WeaponStep {
@@ -109,6 +113,10 @@ function makeShots(weapon: ResolvedWeapon, rng: Rng): Shot[] {
       gravity: weapon.gravity,
       blastRadius: weapon.blastRadius,
       texture: weapon.projectile,
+      element: weapon.element,
+      critChance: weapon.critChance,
+      statusBuildup: weapon.statusBuildup,
+      killRefund: weapon.killRefund,
     });
   }
   return shots;

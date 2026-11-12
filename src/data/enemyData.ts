@@ -1,7 +1,11 @@
+import type { Element } from '../systems/combat';
+import { isElement } from './elementData';
 import raw from './enemies.json';
 
 export interface WalkerStats {
   behavior: 'walker';
+  /** Null for an enemy with no element. */
+  element: Element | null;
   hp: number;
   contactDamage: number;
   speed: number;
@@ -10,6 +14,7 @@ export interface WalkerStats {
 
 export interface TurretStats {
   behavior: 'turret';
+  element: Element | null;
   hp: number;
   contactDamage: number;
   range: number;
@@ -32,6 +37,7 @@ export interface BossStats {
   name: string;
   /** Family id in creatures.json this boss is drawn from. */
   family: string;
+  element: Element | null;
   hp: number;
   contactDamage: number;
   activateRange: number;
@@ -50,16 +56,24 @@ const data = raw as unknown as {
   bosses: Record<string, BossStats>;
 };
 
+function checkElement<T extends { element: Element | null }>(stats: T, kind: string): T {
+  if (stats.element === undefined) return { ...stats, element: null };
+  if (stats.element !== null && !isElement(stats.element)) {
+    throw new Error(`enemies.json: "${kind}": unknown element "${String(stats.element)}"`);
+  }
+  return stats;
+}
+
 export function getEnemyStats(kind: string): EnemyStats {
   const stats = data.enemies[kind];
   if (!stats) throw new Error(`Unknown enemy kind "${kind}" (see src/data/enemies.json)`);
-  return stats;
+  return checkElement(stats, kind);
 }
 
 export function getBossStats(kind: string): BossStats {
   const stats = data.bosses[kind];
   if (!stats) throw new Error(`Unknown boss kind "${kind}" (see src/data/enemies.json)`);
-  return stats;
+  return checkElement(stats, kind);
 }
 
 export function enemyKinds(): string[] {

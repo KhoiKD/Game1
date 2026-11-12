@@ -1,7 +1,7 @@
 import type Phaser from 'phaser';
 import type { TurretStats } from '../data/enemyData';
 import type { EnemyDef } from '../level/parseLevelObjects';
-import { aimVector } from '../util/aim';
+import { aimAngle } from '../util/aim';
 import { Enemy, type EnemyContext } from './Enemy';
 
 /** Stationary shooter. Flashes for a telegraph beat, then fires one aimed shot. */
@@ -20,9 +20,12 @@ export class Turret extends Enemy {
 
     if (this.firingAt !== null) {
       if (ctx.time < this.firingAt) return;
-      ctx.fire(from, aimVector(from, ctx.player), this.stats.bulletSpeed);
+      // Blinded: the shot goes wide by a random amount.
+      const angle = aimAngle(from, ctx.player) + (ctx.rng() * 2 - 1) * this.mods.aimErrorRad;
+      ctx.fire(from, { x: Math.cos(angle), y: Math.sin(angle) }, this.stats.bulletSpeed);
       this.firingAt = null;
-      this.nextFireAt = ctx.time + this.stats.fireIntervalMs;
+      // Slowed: longer wait before the next shot.
+      this.nextFireAt = ctx.time + this.stats.fireIntervalMs * this.mods.cooldownMult;
       this.setTexture('enemy-turret');
       return;
     }

@@ -9,6 +9,7 @@ import {
   PLAYER_IFRAMES_MS,
   PLAYER_MAX_HP,
 } from '../config';
+import { elementRules } from '../data/elementData';
 import { getBossStats, getEnemyStats } from '../data/enemyData';
 import { resolveWeaponInstance, rollDropFor, sanitizeInventory, starterInventory } from '../data/lootData';
 import type { ResolvedWeapon } from '../data/weaponData';
@@ -25,6 +26,7 @@ import {
   type LevelObjects,
   type RawObject,
 } from '../level/parseLevelObjects';
+import { computeDamage, rollCrit, statusFor, type DamageResult, type HitProfile } from '../systems/combat';
 import { applyDamage, createHealth, isInvulnerable, refill, type Health } from '../systems/health';
 import { INVENTORY_CAPACITY, addItem, equippedItems, type Inventory } from '../systems/inventory';
 import type { WeaponInstance } from '../systems/loot';
@@ -55,6 +57,8 @@ import {
   type WeaponState,
 } from '../systems/weapon';
 import { aimAngle, type Vec2 } from '../util/aim';
+import { activeStatuses, addBuildup, tickStatus } from '../systems/status';
+import { ELEMENT_COLOR, STATUS_COLOR, css } from '../ui/elementColors';
 import { capitalize } from '../ui/rarity';
 import { createRng, type Rng } from '../util/rng';
 import type { InventorySceneData } from './InventoryScene';
@@ -63,6 +67,18 @@ const LEVEL_ID = 'level1';
 const FALL_MARGIN = 96; // how far below the map the player may fall before dying
 const PLAYER_HALF_HEIGHT = 32;
 const BOSS_BAR_WIDTH = 520;
+
+interface HitOptions {
+  crit: boolean;
+  arc: boolean;
+  buildup: boolean;
+}
+/** A shot from a weapon. */
+const DIRECT_HIT: HitOptions = { crit: true, arc: true, buildup: true };
+/** Damage caused by a status (burn tick, shock arc): no crit, no chaining, no build-up. */
+const STATUS_DAMAGE: HitOptions = { crit: false, arc: false, buildup: false };
+const BURN_HIT: HitProfile = { damage: 0, element: 'Ember', critChance: 0, statusBuildup: 0, killRefund: 0, sourceUid: null };
+const ARC_HIT: HitProfile = { ...BURN_HIT, element: 'Volt' };
 
 interface GroundLoot {
   sprite: Phaser.GameObjects.Image;
@@ -354,11 +370,19 @@ export class LevelScene extends Phaser.Scene {
     const ctx: EnemyContext = {
       time,
       player: { x: this.player.x, y: this.player.y },
+      rng: this.rng,
       fire: (from, dir, speed) => this.fireEnemyBullet(from, dir, speed),
     };
-    for (const child of this.enemies.getChildren()) {
+    // Copy the list: burn damage can defeat an enemy and remove it mid-loop.
+    for (const child of [...this.enemies.getChildren()]) {
       const enemy = child as Enemy;
       if (!enemy.active) continue;
+      const ticked = tickStatus(enemy.status, time, elementRules);
+      enemy.status = ticked.state;
+      if (ticked.burnDamage > 0) {
+        this.hitEnemy(enemy, { ...BURN_HIT, damage: ticked.burnDamage }, STATUS_DAMAGE);
+        if (!enemy.active) continue;
+      }
       if (Math.abs(enemy.x - this.player.x) <= ENEMY_ACTIVE_RANGE) enemy.tick(ctx);
       else enemy.idle();
     }
@@ -380,20 +404,111 @@ export class LevelScene extends Phaser.Scene {
       bullet.kill();
       return;
     }
+    const hit = bullet.hit;
     if (!bullet.consumePierce()) bullet.kill();
-    if (enemy.takeDamage(bullet.damage, this.time.now)) this.defeat(enemy);
+    this.hitEnemy(enemy, hit);
+  }
+
+  /**
+   * The single path for damaging an enemy: element matchup, crit, status
+   * build-up, shock arcs, damage numbers, and defeat.
+   */
+  private hitEnemy(enemy: Enemy, hit: HitProfile, options: HitOptions = DIRECT_HIT): void {
+    if (!enemy.active || enemy.hp <= 0) return;
+    const time = this.time.now;
+    const result = computeDamage(
+      {
+        base: hit.damage,
+        attackElement: hit.element,
+        targetElement: enemy.element,
+        crit: options.crit && rollCrit(hit.critChance, this.rng),
+        damageTakenMult: enemy.mods.damageTakenMult,
+      },
+      elementRules,
+    );
+    const defeated = enemy.takeDamage(result.amount, time);
+    this.showDamage(enemy, result);
+
+    // An enemy is immune to the status of its own element.
+    const status = statusFor(hit.element, elementRules);
+    if (!defeated && options.buildup && status && status !== statusFor(enemy.element, elementRules)) {
+      const built = addBuildup(
+        enemy.status,
+        status,
+        result.amount * hit.statusBuildup,
+        time,
+        elementRules,
+        enemy.statusResistance,
+      );
+      enemy.status = built.state;
+      if (built.applied) {
+        this.floatText(enemy.x, enemy.y - enemy.height / 2 - 24, status.toUpperCase(), css(STATUS_COLOR[status]), 14);
+      }
+    }
+
+    // Shocked: part of every hit arcs to enemies nearby.
+    if (options.arc && enemy.mods.arcFraction > 0) {
+      const arcHit: HitProfile = { ...ARC_HIT, damage: result.amount * enemy.mods.arcFraction };
+      for (const child of [...this.enemies.getChildren()]) {
+        const other = child as Enemy;
+        if (other === enemy || !other.active) continue;
+        if (Math.hypot(other.x - enemy.x, other.y - enemy.y) > enemy.mods.arcRadius) continue;
+        this.drawArc(enemy, other);
+        this.hitEnemy(other, arcHit, STATUS_DAMAGE);
+      }
+    }
+
+    if (defeated) {
+      this.refundAmmo(hit);
+      this.defeat(enemy);
+    }
+  }
+
+  /** Scavenger-style perks: a kill puts part of the magazine back. */
+  private refundAmmo(hit: HitProfile): void {
+    if (hit.killRefund <= 0 || hit.sourceUid === null) return;
+    const index = this.weaponUids.indexOf(hit.sourceUid);
+    const weapon = this.weapons[index];
+    const state = this.weaponStates[index];
+    if (!weapon || !state || isReloading(state)) return;
+    const refund = Math.max(1, Math.round(weapon.magazine * hit.killRefund));
+    this.weaponStates[index] = { ...state, ammo: Math.min(weapon.magazine, state.ammo + refund) };
+  }
+
+  private showDamage(enemy: Enemy, result: DamageResult): void {
+    const amount = result.amount >= 10 ? Math.round(result.amount) : Number(result.amount.toFixed(1));
+    let color = '#ffffff';
+    if (result.effectiveness === 'strong') color = '#ffb347';
+    if (result.effectiveness === 'weak') color = '#8b93a8';
+    const text = `${amount}${result.crit ? '!' : ''}`;
+    const x = enemy.x + (this.rng() * 2 - 1) * 12;
+    this.floatText(x, enemy.y - enemy.height / 2 - 8, text, result.crit ? '#fff275' : color, result.crit ? 16 : 13);
+  }
+
+  private floatText(x: number, y: number, text: string, color: string, size: number): void {
+    const label = this.add
+      .text(x, y, text, { fontFamily: 'monospace', fontSize: `${size}px`, color, stroke: '#000000', strokeThickness: 3 })
+      .setOrigin(0.5)
+      .setDepth(50);
+    this.tweens.add({ targets: label, y: y - 26, alpha: 0, duration: 520, onComplete: () => label.destroy() });
+  }
+
+  private drawArc(from: Enemy, to: Enemy): void {
+    const line = this.add.graphics().setDepth(4);
+    line.lineStyle(2, ELEMENT_COLOR.Volt, 0.9).lineBetween(from.x, from.y, to.x, to.y);
+    this.tweens.add({ targets: line, alpha: 0, duration: 160, onComplete: () => line.destroy() });
   }
 
   /** Damages every enemy within the projectile's blast radius. */
   private explode(bullet: Bullet): void {
-    const { x, y, blastRadius, damage } = bullet;
+    const { x, y, blastRadius, hit } = bullet;
     // Copy the list: defeated enemies are removed from the group while we loop.
     for (const child of [...this.enemies.getChildren()]) {
       const enemy = child as Enemy;
       if (!enemy.active) continue;
       const reach = blastRadius + Math.max(enemy.width, enemy.height) / 2;
       if (Math.hypot(enemy.x - x, enemy.y - y) > reach) continue;
-      if (enemy.takeDamage(damage, this.time.now)) this.defeat(enemy);
+      this.hitEnemy(enemy, hit);
     }
     const flash = this.add.graphics().setDepth(4);
     flash.fillStyle(0xffb347, 0.55).fillCircle(x, y, blastRadius);
@@ -591,7 +706,22 @@ export class LevelScene extends Phaser.Scene {
     const x = origin.x + dir.x * MUZZLE_OFFSET;
     const y = origin.y + dir.y * MUZZLE_OFFSET;
     const bullet = this.bullets.get(x, y) as Bullet | null;
-    bullet?.fire(x, y, dir, shot);
+    bullet?.fire(x, y, dir, {
+      speed: shot.speed,
+      lifetimeMs: shot.lifetimeMs,
+      pierce: shot.pierce,
+      gravity: shot.gravity,
+      blastRadius: shot.blastRadius,
+      texture: shot.texture,
+      hit: {
+        damage: shot.damage,
+        element: shot.element,
+        critChance: shot.critChance,
+        statusBuildup: shot.statusBuildup,
+        killRefund: shot.killRefund,
+        sourceUid: this.weaponUids[this.weaponIndex] ?? null,
+      },
+    });
   }
 
   private refreshWeaponHud(time: number): void {
@@ -663,7 +793,8 @@ export class LevelScene extends Phaser.Scene {
     const y = GAME_HEIGHT - 32;
     this.bossBar.fillStyle(0x2a3042).fillRect(x, y, BOSS_BAR_WIDTH, 12);
     this.bossBar.fillStyle(0xe4572e).fillRect(x, y, Math.round(BOSS_BAR_WIDTH * boss.hpFraction), 12);
-    this.bossLabel.setText(`${boss.displayName} · Phase ${boss.phaseNumber}`);
+    const statuses = activeStatuses(boss.status, this.time.now).map((s) => s.toUpperCase());
+    this.bossLabel.setText([`${boss.displayName} · Phase ${boss.phaseNumber}`, ...statuses].join(' · '));
   }
 
   private showStageClear(bossName: string): void {

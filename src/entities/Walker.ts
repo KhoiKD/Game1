@@ -17,7 +17,9 @@ export class Walker extends Enemy {
     const body = this.arcadeBody;
     if (this.x >= this.homeX + this.stats.patrolRange || body.blocked.right) this.direction = -1;
     else if (this.x <= this.homeX - this.stats.patrolRange || body.blocked.left) this.direction = 1;
-    this.setVelocityX(this.direction * this.stats.speed);
+    // Rooted: held in place. Slowed: moves at a fraction of its speed.
+    const speed = this.mods.rooted ? 0 : this.stats.speed * this.mods.speedMult;
+    this.setVelocityX(this.direction * speed);
     this.setFlipX(this.direction < 0);
   }
 }

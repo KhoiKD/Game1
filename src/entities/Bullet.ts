@@ -1,11 +1,13 @@
 import Phaser from 'phaser';
 import { GRAVITY } from '../config';
+import { PLAIN_HIT, type HitProfile } from '../systems/combat';
 import type { Vec2 } from '../util/aim';
 
 export interface BulletOptions {
   speed: number;
   lifetimeMs: number;
-  damage?: number;
+  /** Damage, element, and on-hit properties. Defaults to a plain 1-damage hit. */
+  hit?: HitProfile;
   /** Extra enemies the projectile passes through before stopping. */
   pierce?: number;
   /** 0 flies straight; 1 falls at full world gravity. */
@@ -21,7 +23,7 @@ export interface BulletOptions {
  * after kill().
  */
 export class Bullet extends Phaser.Physics.Arcade.Image {
-  damage = 1;
+  hit: HitProfile = PLAIN_HIT;
   blastRadius = 0;
   private pierceLeft = 0;
   private expireAt = 0;
@@ -45,7 +47,7 @@ export class Bullet extends Phaser.Physics.Arcade.Image {
 
     this.setRotation(Math.atan2(dir.y, dir.x));
     this.setVelocity(dir.x * options.speed, dir.y * options.speed);
-    this.damage = options.damage ?? 1;
+    this.hit = options.hit ?? PLAIN_HIT;
     this.blastRadius = options.blastRadius ?? 0;
     this.pierceLeft = options.pierce ?? 0;
     this.hitIds.clear();

@@ -59,9 +59,12 @@ Rules:
 - 2–3 phases, readable telegraphs, weak points, element vulnerabilities.
 
 ## Combat & Elements
-- Elements (placeholder): Ember, Tide, Volt, Verdant, Umbra, Gale. Each has strengths/weaknesses in a simple wheel (`data/elements.json`).
-- Damage = base × weapon mods × perk mods × element multiplier × crit. Formula lives in `systems/combat.ts` with tests.
-- Status effects: burn, soak, shock, root, blind, slow. Max one of each type per target.
+- Elements: Ember, Tide, Volt, Verdant, Umbra, Gale, in one ring (`data/elements.json`): Tide beats Ember beats Verdant beats Volt beats Gale beats Umbra beats Tide. Strong hits deal 1.5x, resisted hits 0.67x; kinetic is always neutral.
+- Damage = base (weapon stats after roll and perks) x element multiplier x crit x target status multiplier. Formula lives in `systems/combat.ts` with tests. Every hit on an enemy goes through `LevelScene.hitEnemy`.
+- Status effects, one per element: burn (Ember, damage over time), soak (Tide, target takes 25% more damage), shock (Volt, part of each hit arcs to nearby enemies), root (Verdant, cannot move), blind (Umbra, aimed attacks go wide), slow (Gale, slower movement and attacks). Max one of each per target, no refreshing while active.
+- Statuses apply by build-up (`systems/status.ts`): elemental damage fills a per-status meter and the status starts at the threshold. Bosses need 5x the build-up and recover in half the time. An enemy is immune to its own element's status.
+- Enemies read `this.mods` (from `statusModifiers`) in `act()` to respect statuses. New enemy behaviors must honor `rooted`, `speedMult`, `cooldownMult`, and `aimErrorRad`.
+- Enemy and boss elements are set by `element` in `enemies.json`. A test requires a weapon that is strong against each boss, and at least one weapon of every element.
 
 ## Weapons (Destiny-style depth)
 - **Archetypes:** pulse rifle, spread gun, beam, launcher, sidearm, melee-burst, charge cannon. Each defines fire pattern, ammo, recoil/spread, and base stats.
@@ -129,7 +132,7 @@ Rules:
 3. (done) Enemy base class, health, hit detection, one stage boss. Player has 5 HP with i-frames; walker and turret enemies; two-phase boss (Komodrake) with telegraphed volleys. Defeating the boss clears the stage and banks all progress. Enemy and boss stats live in `src/data/enemies.json`. Boss capture comes with milestone 7.
 4. (done) Weapon data model and archetypes loaded from JSON. All seven archetypes are playable; firing logic is a pure state machine in `systems/weapon.ts`. Until loot exists, the player carries the `starterLoadout` from `weapons.json` (one weapon per archetype). Elements are labels only until milestone 6.
 5. (done) Loot drops, inventory UI, perk rolling (with Vitest coverage). Enemies drop weapons from `drops.json` tables; rarity sets perk slots and the damage roll; perks come from `perks.json`. The player starts with two starter weapons, carries up to 20, and equips 3. Perks are stat modifiers only; on-hit and on-kill perks come with milestone 6.
-6. Element system and status effects.
+6. (done) Element system and status effects. Six-element wheel, damage formula with crits, six statuses applied by build-up, enemy elements with a pip above each enemy, floating damage numbers. Weapon stats gained `critChance`, `statusBuildup`, and `killRefund`, with perks for each. Statuses affect enemies only; the player cannot be afflicted yet.
 7. Spirit capture, equipped-spirit perks and abilities, evolution, stat balancing formula and simulation test.
 8. Classes, hub, progression, save/load.
 9. Content pass: 3 stages, 6 enemy types, 3 bosses, 20 weapons, first 12 creature families (36 creatures) fully implemented. Remaining families added in batches by element.

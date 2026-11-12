@@ -4,43 +4,50 @@
       "label": "Pulse Rifle", "trigger": "burst", "burstCount": 3, "burstIntervalMs": 60, "chargeMs": 0,
       "fireIntervalMs": 330, "damage": 1.1, "pellets": 1, "spreadDeg": 0,
       "projectileSpeed": 950, "range": 760, "stability": 75, "reloadMs": 1300, "magazine": 27, "handling": 60,
-      "pierce": 0, "gravity": 0, "blastRadius": 0, "projectile": "bullet"
+      "pierce": 0, "gravity": 0, "blastRadius": 0, "projectile": "bullet",
+      "critChance": 0.05, "statusBuildup": 1, "killRefund": 0
     },
     "spread-gun": {
       "label": "Spread Gun", "trigger": "auto", "burstCount": 1, "burstIntervalMs": 0, "chargeMs": 0,
       "fireIntervalMs": 520, "damage": 1, "pellets": 6, "spreadDeg": 7,
       "projectileSpeed": 800, "range": 380, "stability": 50, "reloadMs": 1500, "magazine": 6, "handling": 45,
-      "pierce": 0, "gravity": 0, "blastRadius": 0, "projectile": "pellet"
+      "pierce": 0, "gravity": 0, "blastRadius": 0, "projectile": "pellet",
+      "critChance": 0.03, "statusBuildup": 1, "killRefund": 0
     },
     "beam": {
       "label": "Beam", "trigger": "auto", "burstCount": 1, "burstIntervalMs": 0, "chargeMs": 0,
       "fireIntervalMs": 45, "damage": 0.45, "pellets": 1, "spreadDeg": 0,
       "projectileSpeed": 1500, "range": 560, "stability": 100, "reloadMs": 1500, "magazine": 80, "handling": 55,
-      "pierce": 0, "gravity": 0, "blastRadius": 0, "projectile": "beam"
+      "pierce": 0, "gravity": 0, "blastRadius": 0, "projectile": "beam",
+      "critChance": 0.03, "statusBuildup": 1, "killRefund": 0
     },
     "launcher": {
       "label": "Launcher", "trigger": "semi", "burstCount": 1, "burstIntervalMs": 0, "chargeMs": 0,
       "fireIntervalMs": 900, "damage": 6, "pellets": 1, "spreadDeg": 0,
       "projectileSpeed": 620, "range": 1500, "stability": 85, "reloadMs": 1900, "magazine": 3, "handling": 25,
-      "pierce": 0, "gravity": 0.55, "blastRadius": 80, "projectile": "grenade"
+      "pierce": 0, "gravity": 0.55, "blastRadius": 80, "projectile": "grenade",
+      "critChance": 0.05, "statusBuildup": 1, "killRefund": 0
     },
     "sidearm": {
       "label": "Sidearm", "trigger": "semi", "burstCount": 1, "burstIntervalMs": 0, "chargeMs": 0,
       "fireIntervalMs": 160, "damage": 1.6, "pellets": 1, "spreadDeg": 0,
       "projectileSpeed": 900, "range": 620, "stability": 85, "reloadMs": 800, "magazine": 10, "handling": 95,
-      "pierce": 0, "gravity": 0, "blastRadius": 0, "projectile": "bullet"
+      "pierce": 0, "gravity": 0, "blastRadius": 0, "projectile": "bullet",
+      "critChance": 0.1, "statusBuildup": 1, "killRefund": 0
     },
     "melee-burst": {
       "label": "Melee Burst", "trigger": "auto", "burstCount": 1, "burstIntervalMs": 0, "chargeMs": 0,
       "fireIntervalMs": 380, "damage": 1.2, "pellets": 5, "spreadDeg": 16,
       "projectileSpeed": 520, "range": 96, "stability": 100, "reloadMs": 1000, "magazine": 5, "handling": 80,
-      "pierce": 99, "gravity": 0, "blastRadius": 0, "projectile": "slash"
+      "pierce": 99, "gravity": 0, "blastRadius": 0, "projectile": "slash",
+      "critChance": 0.08, "statusBuildup": 1, "killRefund": 0
     },
     "charge-cannon": {
       "label": "Charge Cannon", "trigger": "charge", "burstCount": 1, "burstIntervalMs": 0, "chargeMs": 800,
       "fireIntervalMs": 250, "damage": 10, "pellets": 1, "spreadDeg": 0,
       "projectileSpeed": 1300, "range": 1100, "stability": 100, "reloadMs": 1600, "magazine": 4, "handling": 35,
-      "pierce": 99, "gravity": 0, "blastRadius": 0, "projectile": "charge-shot"
+      "pierce": 99, "gravity": 0, "blastRadius": 0, "projectile": "charge-shot",
+      "critChance": 0.12, "statusBuildup": 1, "killRefund": 0
     }
   },
   "weapons": [
@@ -50,7 +57,9 @@
     { "id": "volt-lance", "name": "Volt Lance", "archetype": "beam", "element": "Volt", "rarity": "uncommon" },
     { "id": "cinder-lobber", "name": "Cinder Lobber", "archetype": "launcher", "element": "Ember", "rarity": "uncommon" },
     { "id": "brush-cutter", "name": "Brush Cutter", "archetype": "melee-burst", "element": "Verdant", "rarity": "uncommon" },
-    { "id": "longwake", "name": "Longwake", "archetype": "charge-cannon", "element": "Tide", "rarity": "rare" }
+    { "id": "longwake", "name": "Longwake", "archetype": "charge-cannon", "element": "Tide", "rarity": "rare" },
+    { "id": "gust-needle", "name": "Gust Needle", "archetype": "sidearm", "element": "Gale", "rarity": "uncommon" },
+    { "id": "dusk-repeater", "name": "Dusk Repeater", "archetype": "pulse-rifle", "element": "Umbra", "rarity": "uncommon" }
   ],
   "starterLoadout": ["field-carbine", "pocket-sting"]
 }
