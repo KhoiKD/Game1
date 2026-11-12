@@ -1,7 +1,7 @@
 import type Phaser from 'phaser';
 import type { WalkerStats } from '../data/enemyData';
 import type { EnemyDef } from '../level/parseLevelObjects';
-import { Enemy } from './Enemy';
+import { Enemy, enemyTexture } from './Enemy';
 
 /** Patrols back and forth around the point it was placed. Hurts on contact. */
 export class Walker extends Enemy {
@@ -9,7 +9,7 @@ export class Walker extends Enemy {
   private direction: 1 | -1 = -1;
 
   constructor(scene: Phaser.Scene, def: EnemyDef, private readonly stats: WalkerStats) {
-    super(scene, def, 'enemy-walker', stats);
+    super(scene, def, enemyTexture('walker', stats.element), stats);
     this.homeX = def.x;
   }
 

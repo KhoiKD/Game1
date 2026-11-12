@@ -2,7 +2,7 @@ import type Phaser from 'phaser';
 import type { TurretStats } from '../data/enemyData';
 import type { EnemyDef } from '../level/parseLevelObjects';
 import { aimAngle } from '../util/aim';
-import { Enemy, type EnemyContext } from './Enemy';
+import { Enemy, enemyTexture, type EnemyContext } from './Enemy';
 
 /** Stationary shooter. Flashes for a telegraph beat, then fires one aimed shot. */
 export class Turret extends Enemy {
@@ -10,7 +10,7 @@ export class Turret extends Enemy {
   private firingAt: number | null = null;
 
   constructor(scene: Phaser.Scene, def: EnemyDef, private readonly stats: TurretStats) {
-    super(scene, def, 'enemy-turret', stats);
+    super(scene, def, enemyTexture('turret', stats.element), stats);
     this.arcadeBody.setAllowGravity(false);
     this.arcadeBody.setImmovable(true);
   }
@@ -26,14 +26,14 @@ export class Turret extends Enemy {
       this.firingAt = null;
       // Slowed: longer wait before the next shot.
       this.nextFireAt = ctx.time + this.stats.fireIntervalMs * this.mods.cooldownMult;
-      this.setTexture('enemy-turret');
+      this.showWarning(false);
       return;
     }
 
     const distance = Math.hypot(ctx.player.x - from.x, ctx.player.y - from.y);
     if (distance <= this.stats.range && ctx.time >= this.nextFireAt) {
       this.firingAt = ctx.time + this.stats.telegraphMs;
-      this.setTexture('enemy-turret-warn');
+      this.showWarning(true);
     }
   }
 
@@ -41,7 +41,7 @@ export class Turret extends Enemy {
     super.idle();
     if (this.firingAt !== null) {
       this.firingAt = null;
-      this.setTexture('enemy-turret');
+      this.showWarning(false);
     }
   }
 }

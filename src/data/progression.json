@@ -3,11 +3,16 @@
   "perLevel": { "damage": 0.02, "hpEvery": 5 },
   "weaponPower": { "common": 5, "uncommon": 8, "rare": 12, "epic": 16, "legendary": 20 },
   "tiers": [
-    { "tier": 1, "name": "Tier 1", "requiredPower": 0,  "enemyHpMult": 1,   "xpMult": 1 },
-    { "tier": 2, "name": "Tier 2", "requiredPower": 9,  "enemyHpMult": 1.6, "xpMult": 1.5 },
-    { "tier": 3, "name": "Tier 3", "requiredPower": 14, "enemyHpMult": 2.4, "xpMult": 2.2 }
+    { "tier": 1, "name": "Tier 1", "requiredPower": 0,  "stageBonus": 0, "bossHpMult": 1,   "xpMult": 1 },
+    { "tier": 2, "name": "Tier 2", "requiredPower": 9,  "stageBonus": 1, "bossHpMult": 1.6, "xpMult": 1.5 },
+    { "tier": 3, "name": "Tier 3", "requiredPower": 14, "stageBonus": 2, "bossHpMult": 2.4, "xpMult": 2.2 }
   ],
   "stages": [
-    { "id": "level1", "name": "Thornway", "map": "level1", "blurb": "Overgrown causeway. Verdant and Volt creatures; an Ember boss at the end." }
+    { "id": "level1", "name": "Thornway", "map": "level1", "requires": null, "powerOffset": 0,
+      "blurb": "Overgrown causeway. Verdant, Volt, and Ember creatures." },
+    { "id": "level2", "name": "Brinemere", "map": "level2", "requires": "level1", "powerOffset": 3,
+      "blurb": "Storm-lashed shore. Tide, Gale, and Volt creatures." },
+    { "id": "level3", "name": "Duskhollow", "map": "level3", "requires": "level2", "powerOffset": 6,
+      "blurb": "Sunless hollow. Umbra and Ember creatures, tougher from the start." }
   ]
 }

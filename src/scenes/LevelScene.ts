@@ -16,6 +16,10 @@ import { resolveWeaponInstance, rollDropFor } from '../data/lootData';
 import { findClass, getStage, progression } from '../data/progressionData';
 import type { ResolvedWeapon } from '../data/weaponData';
 import { Boss } from '../entities/Boss';
+import { Charger } from '../entities/Charger';
+import { Flyer } from '../entities/Flyer';
+import { Hopper } from '../entities/Hopper';
+import { Lobber } from '../entities/Lobber';
 import { Bullet } from '../entities/Bullet';
 import { Enemy, type EnemyContext } from '../entities/Enemy';
 import { Player } from '../entities/Player';
@@ -49,7 +53,7 @@ import {
   unsecuredWeaponCount,
   type RunState,
 } from '../systems/runState';
-import { levelProgress, powerScore, tierRule, withClassAndLevel, type ClassDef } from '../systems/progression';
+import { levelProgress, powerScore, stageLevel, tierRule, withClassAndLevel, type ClassDef } from '../systems/progression';
 import { markCleared, profileFromRun, runStateFrom, savedRunFrom } from '../systems/save';
 import { getSession, resetSession, saveSession, setProfile, setRun } from '../state/session';
 import {
@@ -436,16 +440,27 @@ export class LevelScene extends Phaser.Scene {
   }
 
   private createEnemy(def: EnemyDef): Enemy {
-    // Higher tiers make every enemy tougher.
-    const hpMult = tierRule(this.tier, progression).enemyHpMult;
+    // Higher tiers bring creatures at a later evolution stage and a tougher boss.
+    const tier = tierRule(this.tier, progression);
     if (def.boss) {
-      const bossStats = getBossStats(def.kind);
-      this.boss = new Boss(this, def, { ...bossStats, hp: bossStats.hp * hpMult });
+      this.boss = new Boss(this, def, getBossStats(def.kind, tier.bossHpMult));
       return this.boss;
     }
-    const base = getEnemyStats(def.kind);
-    const stats = { ...base, hp: base.hp * hpMult };
-    return stats.behavior === 'walker' ? new Walker(this, def, stats) : new Turret(this, def, stats);
+    const stats = getEnemyStats(def.kind, tier.stageBonus);
+    switch (stats.behavior) {
+      case 'walker':
+        return new Walker(this, def, stats);
+      case 'turret':
+        return new Turret(this, def, stats);
+      case 'hopper':
+        return new Hopper(this, def, stats);
+      case 'flyer':
+        return new Flyer(this, def, stats);
+      case 'charger':
+        return new Charger(this, def, stats);
+      case 'lobber':
+        return new Lobber(this, def, stats);
+    }
   }
 
   private tickEnemies(time: number): void {
@@ -453,7 +468,7 @@ export class LevelScene extends Phaser.Scene {
       time,
       player: { x: this.player.x, y: this.player.y },
       rng: this.rng,
-      fire: (from, dir, speed) => this.fireEnemyBullet(from, dir, speed),
+      fire: (from, dir, speed, gravity) => this.fireEnemyBullet(from, dir, speed, gravity),
     };
     // Copy the list: burn damage can defeat an enemy and remove it mid-loop.
     for (const child of [...this.enemies.getChildren()]) {
@@ -476,9 +491,9 @@ export class LevelScene extends Phaser.Scene {
     }
   }
 
-  private fireEnemyBullet(from: Vec2, dir: Vec2, speed: number): void {
+  private fireEnemyBullet(from: Vec2, dir: Vec2, speed: number, gravity = 0): void {
     const bullet = this.enemyBullets.get(from.x, from.y) as Bullet | null;
-    bullet?.fire(from.x, from.y, dir, { speed, lifetimeMs: ENEMY_BULLET_LIFETIME_MS });
+    bullet?.fire(from.x, from.y, dir, { speed, lifetimeMs: ENEMY_BULLET_LIFETIME_MS, gravity });
   }
 
   private onBulletHitsEnemy(a: unknown, b: unknown): void {
@@ -624,7 +639,7 @@ export class LevelScene extends Phaser.Scene {
     const ref = enemy.creature;
     if (!ref) return;
     const family = getFamily(ref.family);
-    const perkMult = enemy === this.boss ? bossPerkMult(this.tier, balance) : 1;
+    const perkMult = enemy === this.boss ? bossPerkMult(stageLevel(this.stageId, this.tier, progression), balance) : 1;
     const result = captureSpirit(this.run.spirits, family, ref.stage, perkMult, balance);
     this.applySpirits(result.collection);
 
@@ -820,7 +835,7 @@ export class LevelScene extends Phaser.Scene {
 
   /** Experience for a defeated or captured enemy, scaled by the tier. */
   private grantXp(enemy: Enemy): void {
-    const base = enemy === this.boss ? getBossStats(enemy.kind).xp : getEnemyStats(enemy.kind).xp;
+    const base = enemy.xp;
     const before = this.playerLevel();
     this.run = addXp(this.run, Math.round(base * tierRule(this.tier, progression).xpMult));
     if (this.stageCleared) {
@@ -921,7 +936,7 @@ export class LevelScene extends Phaser.Scene {
 
   private defeat(enemy: Enemy, dropLoot = true): void {
     this.run = defeatEnemy(this.run, enemy.enemyId);
-    if (dropLoot) this.dropLoot(enemy.kind, enemy.x, enemy.y);
+    if (dropLoot) this.dropLoot(enemy.dropTable, enemy.x, enemy.y);
     this.grantKillXp();
     this.grantXp(enemy);
     if (enemy === this.boss) {

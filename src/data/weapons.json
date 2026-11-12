@@ -59,7 +59,23 @@
     { "id": "brush-cutter", "name": "Brush Cutter", "archetype": "melee-burst", "element": "Verdant", "rarity": "uncommon" },
     { "id": "longwake", "name": "Longwake", "archetype": "charge-cannon", "element": "Tide", "rarity": "rare" },
     { "id": "gust-needle", "name": "Gust Needle", "archetype": "sidearm", "element": "Gale", "rarity": "uncommon" },
-    { "id": "dusk-repeater", "name": "Dusk Repeater", "archetype": "pulse-rifle", "element": "Umbra", "rarity": "uncommon" }
+    { "id": "dusk-repeater", "name": "Dusk Repeater", "archetype": "pulse-rifle", "element": "Umbra", "rarity": "uncommon" },
+    { "id": "ember-rake", "name": "Ember Rake", "archetype": "spread-gun", "element": "Ember", "rarity": "uncommon" },
+    { "id": "tidal-coil", "name": "Tidal Coil", "archetype": "beam", "element": "Tide", "rarity": "uncommon" },
+    { "id": "thunderhead-rail", "name": "Thunderhead Rail", "archetype": "charge-cannon", "element": "Volt", "rarity": "rare" },
+    { "id": "bramble-repeater", "name": "Bramble Repeater", "archetype": "pulse-rifle", "element": "Verdant", "rarity": "uncommon" },
+    { "id": "night-fang", "name": "Night Fang", "archetype": "melee-burst", "element": "Umbra", "rarity": "rare" },
+    { "id": "squall-mortar", "name": "Squall Mortar", "archetype": "launcher", "element": "Gale", "rarity": "rare" },
+    { "id": "marrow-driver", "name": "Marrow Driver", "archetype": "charge-cannon", "element": "kinetic", "rarity": "uncommon",
+      "stats": { "chargeMs": 500, "damage": 7, "magazine": 5 } },
+    { "id": "glowmoth-wand", "name": "Glowmoth Wand", "archetype": "beam", "element": "Umbra", "rarity": "rare",
+      "stats": { "range": 680, "magazine": 60 } },
+    { "id": "undertow-revolver", "name": "Undertow Revolver", "archetype": "sidearm", "element": "Tide", "rarity": "rare",
+      "stats": { "damage": 2.6, "fireIntervalMs": 300, "magazine": 6, "critChance": 0.15 } },
+    { "id": "hearthbreaker", "name": "Hearthbreaker", "archetype": "launcher", "element": "kinetic", "rarity": "epic",
+      "stats": { "blastRadius": 110, "damage": 7, "magazine": 2 } },
+    { "id": "galefan", "name": "Galefan", "archetype": "spread-gun", "element": "Gale", "rarity": "uncommon",
+      "stats": { "pellets": 8, "spreadDeg": 9, "fireIntervalMs": 420, "damage": 0.8 } }
   ],
   "starterLoadout": ["field-carbine", "pocket-sting"]
 }

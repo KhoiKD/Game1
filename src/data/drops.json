@@ -7,17 +7,11 @@
     "legendary": { "perkSlots": ["barrel", "magazine", "trait", "signature"], "damageRoll": [1.28, 1.42] }
   },
   "tables": {
-    "walker": {
-      "dropChance": 0.5,
-      "rarityWeights": { "common": 50, "uncommon": 30, "rare": 14, "epic": 5, "legendary": 1 }
-    },
-    "turret": {
-      "dropChance": 0.6,
-      "rarityWeights": { "common": 40, "uncommon": 34, "rare": 18, "epic": 7, "legendary": 1 }
-    },
-    "komodrake": {
-      "dropChance": 1,
-      "rarityWeights": { "rare": 55, "epic": 35, "legendary": 10 }
-    }
+    "common":    { "dropChance": 0.5,  "rarityWeights": { "common": 50, "uncommon": 30, "rare": 14, "epic": 5, "legendary": 1 } },
+    "uncommon":  { "dropChance": 0.6,  "rarityWeights": { "common": 40, "uncommon": 34, "rare": 18, "epic": 7, "legendary": 1 } },
+    "rare":      { "dropChance": 0.7,  "rarityWeights": { "uncommon": 35, "rare": 42, "epic": 19, "legendary": 4 } },
+    "epic":      { "dropChance": 0.8,  "rarityWeights": { "uncommon": 15, "rare": 45, "epic": 32, "legendary": 8 } },
+    "legendary": { "dropChance": 0.9,  "rarityWeights": { "rare": 40, "epic": 42, "legendary": 18 } },
+    "boss":      { "dropChance": 1,    "rarityWeights": { "rare": 55, "epic": 35, "legendary": 10 } }
   }
 }

@@ -1,17 +1,19 @@
 import type Phaser from 'phaser';
+import { BOSS_RAIN_SPACING } from '../config';
 import { elementRules } from '../data/elementData';
 import type { BossPhaseStats, BossStats } from '../data/enemyData';
 import type { EnemyDef } from '../level/parseLevelObjects';
 import { phaseIndex } from '../systems/bossPhase';
 import { aimAngle } from '../util/aim';
-import { Enemy, type EnemyContext } from './Enemy';
+import { Enemy, enemyTexture, type EnemyContext } from './Enemy';
 
 const FIRST_ATTACK_DELAY_MS = 1000;
+const RAIN_HEIGHT = 400;
 
 /**
  * Stage boss. Dormant until the player comes close (or shoots it), then loops:
- * wait, telegraph, attack. Its phases come from data: later phases fire wider
- * volleys faster and can add a hop toward the player.
+ * wait, telegraph, attack. Its phases come from data: each sets an attack pattern
+ * (aimed fan, ring, or rain from above), its pace, and whether the boss hops.
  */
 export class Boss extends Enemy {
   readonly displayName: string;
@@ -23,7 +25,7 @@ export class Boss extends Enemy {
   private hopping = false;
 
   constructor(scene: Phaser.Scene, def: EnemyDef, private readonly stats: BossStats) {
-    super(scene, def, 'boss', stats);
+    super(scene, def, enemyTexture('boss', stats.element), stats);
     this.displayName = stats.name;
     this.homeX = def.x;
     this.arcadeBody.setCollideWorldBounds(true);
@@ -73,12 +75,12 @@ export class Boss extends Enemy {
       this.attack(ctx, phase);
       this.attackingAt = null;
       this.nextAttackAt = ctx.time + phase.cooldownMs * this.mods.cooldownMult;
-      this.setTexture('boss');
+      this.showWarning(false);
       return;
     }
     if (ctx.time >= this.nextAttackAt && !this.hopping) {
       this.attackingAt = ctx.time + this.stats.telegraphMs;
-      this.setTexture('boss-warn');
+      this.showWarning(true);
     }
   }
 
@@ -95,13 +97,38 @@ export class Boss extends Enemy {
   }
 
   private attack(ctx: EnemyContext, phase: BossPhaseStats): void {
-    const from = { x: this.x, y: this.y - this.height / 4 };
-    // Blinded: the whole volley is aimed off by a random amount.
-    const base = aimAngle(from, ctx.player) + (ctx.rng() * 2 - 1) * this.mods.aimErrorRad;
-    const spread = (phase.spreadDeg * Math.PI) / 180;
-    for (let i = 0; i < phase.bullets; i++) {
-      const angle = base + (i - (phase.bullets - 1) / 2) * spread;
-      ctx.fire(from, { x: Math.cos(angle), y: Math.sin(angle) }, this.stats.bulletSpeed);
+    const from = { x: this.x, y: this.y - this.displayHeight / 4 };
+    const speed = this.stats.bulletSpeed;
+    // Blinded: the whole attack is aimed off by a random amount.
+    const error = (ctx.rng() * 2 - 1) * this.mods.aimErrorRad;
+    switch (phase.pattern) {
+      case 'aimed': {
+        const base = aimAngle(from, ctx.player) + error;
+        const spread = (phase.spreadDeg * Math.PI) / 180;
+        for (let i = 0; i < phase.bullets; i++) {
+          const angle = base + (i - (phase.bullets - 1) / 2) * spread;
+          ctx.fire(from, { x: Math.cos(angle), y: Math.sin(angle) }, speed);
+        }
+        break;
+      }
+      case 'ring': {
+        // Evenly in every direction; the starting angle turns each time so the gaps move.
+        const offset = this.attackCount * 0.4 + error;
+        for (let i = 0; i < phase.bullets; i++) {
+          const angle = offset + (i / phase.bullets) * Math.PI * 2;
+          ctx.fire(from, { x: Math.cos(angle), y: Math.sin(angle) }, speed * 0.8);
+        }
+        break;
+      }
+      case 'rain': {
+        // A line of shots falling from above where the player stands, with gaps to stand in.
+        const centre = ctx.player.x + Math.tan(error) * 200;
+        for (let i = 0; i < phase.bullets; i++) {
+          const x = centre + (i - (phase.bullets - 1) / 2) * BOSS_RAIN_SPACING;
+          ctx.fire({ x, y: ctx.player.y - RAIN_HEIGHT }, { x: 0, y: 1 }, speed * 0.75);
+        }
+        break;
+      }
     }
 
     this.attackCount += 1;

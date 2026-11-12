@@ -12,7 +12,9 @@ export interface TierRule {
   name: string;
   /** Power the player needs before this tier can be started. */
   requiredPower: number;
-  enemyHpMult: number;
+  /** Creatures appear this many evolution stages higher (capped at stage 3). */
+  stageBonus: number;
+  bossHpMult: number;
   xpMult: number;
 }
 
@@ -22,6 +24,10 @@ export interface StageDef {
   /** Tilemap key. */
   map: string;
   blurb: string;
+  /** Stage that must be cleared (any tier) before this one opens; null for the first stage. */
+  requires: string | null;
+  /** Added to each tier's required Power for this stage. */
+  powerOffset: number;
 }
 
 export interface ProgressionRules {
@@ -100,12 +106,34 @@ export function tierRule(tier: number, rules: ProgressionRules): TierRule {
   return rule;
 }
 
-export type TierStatus = 'open' | 'needs-power' | 'needs-clear';
+export type TierStatus = 'open' | 'needs-power' | 'needs-clear' | 'needs-stage';
 
-/** A tier opens when the tier below it is cleared and the player's Power is high enough. */
-export function tierStatus(tier: number, power: number, highestCleared: number, rules: ProgressionRules): TierStatus {
+/** Power needed for a tier of a stage: later stages ask for more. */
+export function requiredPower(tier: number, stage: StageDef | null, rules: ProgressionRules): number {
+  return tierRule(tier, rules).requiredPower + (stage?.powerOffset ?? 0);
+}
+
+/**
+ * A tier opens when the stage before this one is cleared, the tier below it is
+ * cleared, and the player's Power is high enough. `cleared` is the highest tier
+ * cleared per stage id; pass `stage` as null to ignore stage unlocks.
+ */
+export function tierStatus(
+  tier: number,
+  power: number,
+  highestCleared: number,
+  rules: ProgressionRules,
+  stage: StageDef | null = null,
+  cleared: Record<string, number> = {},
+): TierStatus {
+  if (stage?.requires && (cleared[stage.requires] ?? 0) < 1) return 'needs-stage';
   if (tier > 1 && highestCleared < tier - 1) return 'needs-clear';
-  return power >= tierRule(tier, rules).requiredPower ? 'open' : 'needs-power';
+  return power >= requiredPower(tier, stage, rules) ? 'open' : 'needs-power';
+}
+
+/** How hard a run is, for scaling the boss spirit: later stages and higher tiers count more. */
+export function stageLevel(stageId: string, tier: number, rules: ProgressionRules): number {
+  return Math.max(0, rules.stages.findIndex((s) => s.id === stageId)) + tier;
 }
 
 // ---- what class and level add --------------------------------------------

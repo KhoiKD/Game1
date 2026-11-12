@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
-import { balance, findFamily, getFamily, type CreatureFamily } from '../data/creatureData';
+import { balance, findFamily, getFamily, loreFor, type CreatureFamily } from '../data/creatureData';
 import { ELEMENTS } from '../data/elementData';
 import { SPIRIT_STATS } from '../systems/spiritStats';
 import {
@@ -178,10 +178,18 @@ export class SpiritsScene extends Phaser.Scene {
     this.label(DETAIL_X, 84, spiritName(spirit, family, balance), color, 20);
     const boss = spirit.perkMult > 1 ? ' · boss spirit' : '';
     this.label(DETAIL_X, 112, `Stage ${stage} · Lv ${level} · ${family.elements.join('/')} · ${family.role} · ${capitalize(family.rarity)}${boss}`, DIM, 13);
-    this.label(DETAIL_X, 131, `Based on: ${family.inspiration}`, FAINT, 12);
-    this.label(DETAIL_X, 149, growthLine(spirit, family), DIM, 13);
+    // Lore where it has been written; the real species it is based on otherwise.
+    const lore = loreFor(spiritName(spirit, family, balance));
+    this.add.text(DETAIL_X, 131, lore ?? `Based on: ${family.inspiration}`, {
+      fontFamily: FONT,
+      fontSize: '12px',
+      color: FAINT,
+      fontStyle: lore ? 'italic' : 'normal',
+      wordWrap: { width: 430 },
+    });
+    this.label(DETAIL_X, 165, growthLine(spirit, family), DIM, 13);
 
-    let y = 176;
+    let y = 190;
     const stats = spiritStats(spirit, family, balance);
     SPIRIT_STATS.forEach((stat, index) => {
       const x = DETAIL_X + (index % 2) * 210;

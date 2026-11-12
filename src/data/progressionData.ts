@@ -23,11 +23,11 @@ export function validateProgression(input: unknown): ProgressionRules {
   if (p.tiers.length === 0) throw new Error('progression.json: needs at least one tier');
   p.tiers.forEach((tier, index) => {
     if (tier.tier !== index + 1) throw new Error('progression.json: tiers must be numbered 1, 2, 3, ... in order');
-    if (!tier.name || tier.requiredPower < 0 || !positive(tier.enemyHpMult) || !positive(tier.xpMult)) {
+    if (!tier.name || tier.requiredPower < 0 || tier.stageBonus < 0 || !positive(tier.bossHpMult) || !positive(tier.xpMult)) {
       throw new Error(`progression.json: tier ${tier.tier}: bad values`);
     }
     const below = p.tiers[index - 1];
-    if (below && (tier.requiredPower < below.requiredPower || tier.enemyHpMult < below.enemyHpMult)) {
+    if (below && (tier.requiredPower < below.requiredPower || tier.bossHpMult < below.bossHpMult || tier.stageBonus < below.stageBonus)) {
       throw new Error(`progression.json: tier ${tier.tier} must not be easier than the tier below it`);
     }
   });
@@ -35,6 +35,8 @@ export function validateProgression(input: unknown): ProgressionRules {
   const ids = new Set<string>();
   for (const stage of p.stages) {
     if (!stage.id || !stage.name || !stage.map || ids.has(stage.id)) throw new Error('progression.json: every stage needs a unique id, a name, and a map');
+    if (stage.requires !== null && !ids.has(stage.requires)) throw new Error(`progression.json: stage "${stage.id}" requires a stage that is not listed before it`);
+    if (typeof stage.powerOffset !== 'number' || stage.powerOffset < 0) throw new Error(`progression.json: stage "${stage.id}": bad powerOffset`);
     ids.add(stage.id);
   }
   if (p.stages.length === 0) throw new Error('progression.json: needs at least one stage');

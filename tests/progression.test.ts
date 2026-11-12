@@ -10,6 +10,8 @@ import {
   levelForXp,
   levelProgress,
   powerScore,
+  requiredPower,
+  stageLevel,
   tierRule,
   tierStatus,
   withClassAndLevel,
@@ -84,6 +86,23 @@ describe('power and tiers', () => {
     expect(powerScore(afterOneRun, 4, rules)).toBeGreaterThanOrEqual(tierRule(2, rules).requiredPower);
   });
 
+  it('locks a stage until the stage before it is cleared, and asks more Power of later stages', () => {
+    const [first, second] = progression.stages;
+    expect(first!.requires).toBeNull();
+    expect(tierStatus(1, 999, 0, rules, second!, {})).toBe('needs-stage');
+    expect(tierStatus(1, 999, 0, rules, second!, { [first!.id]: 1 })).toBe('open');
+    expect(requiredPower(1, second!, rules)).toBe(second!.powerOffset);
+    expect(tierStatus(1, second!.powerOffset - 1, 0, rules, second!, { [first!.id]: 1 })).toBe('needs-power');
+    expect(requiredPower(2, first!, rules)).toBe(tierRule(2, rules).requiredPower);
+  });
+
+  it('rates later stages and higher tiers as harder for boss spirits', () => {
+    expect(stageLevel('level1', 1, rules)).toBe(1);
+    expect(stageLevel('level1', 3, rules)).toBe(3);
+    expect(stageLevel('level3', 1, rules)).toBe(3);
+    expect(stageLevel('level3', 3, rules)).toBeGreaterThan(stageLevel('level2', 3, rules));
+  });
+
   it('throws for an unknown tier or stage', () => {
     expect(() => tierRule(99, rules)).toThrow();
     expect(() => getStage('nowhere')).toThrow();
@@ -149,12 +168,13 @@ describe('class and progression data', () => {
 
   it('awards experience for every enemy and boss', () => {
     for (const kind of enemyKinds()) expect(getEnemyStats(kind).xp, kind).toBeGreaterThan(0);
-    for (const kind of bossKinds()) expect(getBossStats(kind).xp, kind).toBeGreaterThan(getEnemyStats('walker').xp);
+    const most = Math.max(...enemyKinds().map((kind) => getEnemyStats(kind, 2).xp));
+    for (const kind of bossKinds()) expect(getBossStats(kind).xp, kind).toBeGreaterThan(most);
   });
 
   it('rejects bad progression data', () => {
     const easierTier = clone(rawProgression);
-    easierTier.tiers[1]!.enemyHpMult = 0.5;
+    easierTier.tiers[1]!.bossHpMult = 0.5;
     expect(() => validateProgression(easierTier)).toThrow(/must not be easier/);
 
     const gatedStart = clone(rawProgression);

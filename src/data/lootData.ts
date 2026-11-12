@@ -96,7 +96,7 @@ export function getPerk(id: string): PerkDef {
   return perk;
 }
 
-/** Rolls the drop for a defeated enemy or boss. Sources without a table drop nothing. */
+/** Rolls a named drop table (a creature rarity, or "boss"). Unknown tables drop nothing. */
 export function rollDropFor(source: string, rng: Rng): WeaponInstance | null {
   const table = dropData.tables[source];
   return table ? rollDrop(table, lootRules, rng) : null;

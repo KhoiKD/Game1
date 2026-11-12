@@ -13,7 +13,7 @@ import {
 } from '../src/data/lootData';
 import rawDrops from '../src/data/drops.json';
 import rawPerks from '../src/data/perks.json';
-import { enemyKinds, bossKinds } from '../src/data/enemyData';
+import { enemyKinds, bossKinds, getBossStats, getEnemyStats } from '../src/data/enemyData';
 import { ARCHETYPE_IDS, RARITIES, getWeapon, resolveWeapon, weaponData, type Rarity } from '../src/data/weaponData';
 import {
   EQUIP_SLOTS,
@@ -86,9 +86,9 @@ describe('perk data', () => {
 
 describe('drop data', () => {
   it('has a drop table for every enemy and boss', () => {
-    for (const kind of [...enemyKinds(), ...bossKinds()]) {
-      expect(dropData.tables[kind], kind).toBeDefined();
-    }
+    for (const kind of enemyKinds()) expect(dropData.tables[getEnemyStats(kind).dropTable], kind).toBeDefined();
+    for (const kind of bossKinds()) expect(dropData.tables[getBossStats(kind).dropTable], kind).toBeDefined();
+    for (const rarity of RARITIES) expect(dropData.tables[rarity], rarity).toBeDefined();
   });
 
   it('gives rarer weapons at least as many perk slots and higher damage rolls', () => {
@@ -105,11 +105,11 @@ describe('drop data', () => {
 
   it('rejects bad drop tables', () => {
     const badChance = clone(rawDrops);
-    badChance.tables.walker.dropChance = 1.5;
+    badChance.tables.common.dropChance = 1.5;
     expect(() => validateDrops(badChance)).toThrow(/dropChance/);
 
     const noWeights = clone(rawDrops) as { tables: Record<string, { rarityWeights: Record<string, number> }> };
-    noWeights.tables.walker!.rarityWeights = {};
+    noWeights.tables.common!.rarityWeights = {};
     expect(() => validateDrops(noWeights)).toThrow(/rarity weight/);
 
     const badRoll = clone(rawDrops);
@@ -202,16 +202,16 @@ describe('rolling', () => {
     expect(rollDrop({ dropChance: 0, rarityWeights: weights }, lootRules, rng)).toBeNull();
     expect(rollDrop({ dropChance: 1, rarityWeights: weights }, lootRules, rng)).not.toBeNull();
     let drops = 0;
-    for (let i = 0; i < 4000; i++) if (rollDropFor('walker', rng)) drops += 1;
+    for (let i = 0; i < 4000; i++) if (rollDropFor('common', rng)) drops += 1;
     const rate = drops / 4000;
-    expect(rate).toBeGreaterThan(dropData.tables.walker!.dropChance - 0.04);
-    expect(rate).toBeLessThan(dropData.tables.walker!.dropChance + 0.04);
+    expect(rate).toBeGreaterThan(dropData.tables.common!.dropChance - 0.04);
+    expect(rate).toBeLessThan(dropData.tables.common!.dropChance + 0.04);
   });
 
   it('drops only rare or better from the boss, and nothing from an unknown source', () => {
     const rng = createRng(8);
     for (let i = 0; i < 300; i++) {
-      const drop = rollDropFor('komodrake', rng);
+      const drop = rollDropFor('boss', rng);
       expect(drop).not.toBeNull();
       expect(RARITIES.indexOf(drop!.rarity)).toBeGreaterThanOrEqual(RARITIES.indexOf('rare'));
     }

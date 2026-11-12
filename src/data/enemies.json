@@ -1,46 +1,62 @@
 {
-  "enemies": {
-    "walker": {
-      "behavior": "walker",
-      "element": "Verdant",
-      "creature": { "family": "verdant-stickinsect", "stage": 1 },
-      "hp": 3,
-      "xp": 10,
-      "contactDamage": 1,
-      "speed": 70,
-      "patrolRange": 96
-    },
-    "turret": {
-      "behavior": "turret",
-      "element": "Volt",
-      "creature": { "family": "volt-flytrap", "stage": 1 },
-      "hp": 4,
-      "xp": 15,
-      "contactDamage": 1,
-      "range": 520,
-      "telegraphMs": 450,
-      "fireIntervalMs": 1800,
-      "bulletSpeed": 300
-    }
+  "stageScaling": {
+    "hp": [1, 1.8, 3],
+    "xp": [1, 2, 3.5],
+    "contactDamage": [1, 1, 2],
+    "speed": [1, 1.1, 1.2],
+    "cooldown": [1, 0.9, 0.8],
+    "size": [1, 1.2, 1.45]
+  },
+  "behaviors": {
+    "walker":  { "hp": 3, "xp": 10, "contactDamage": 1, "speed": 70, "patrolRange": 96 },
+    "turret":  { "hp": 4, "xp": 15, "contactDamage": 1, "range": 520, "telegraphMs": 450, "fireIntervalMs": 1800, "bulletSpeed": 300 },
+    "hopper":  { "hp": 3, "xp": 12, "contactDamage": 1, "range": 420, "telegraphMs": 300, "hopIntervalMs": 1400, "hopSpeedX": 170, "hopSpeedY": 480, "leash": 260 },
+    "flyer":   { "hp": 2, "xp": 12, "contactDamage": 1, "speed": 90, "patrolRange": 140, "bobHeight": 18, "range": 460, "telegraphMs": 400, "fireIntervalMs": 2200, "bulletSpeed": 260 },
+    "charger": { "hp": 4, "xp": 14, "contactDamage": 1, "speed": 50, "patrolRange": 80, "range": 320, "telegraphMs": 500, "chargeSpeed": 360, "chargeMs": 700, "restMs": 900, "leash": 300 },
+    "lobber":  { "hp": 3, "xp": 14, "contactDamage": 1, "range": 480, "telegraphMs": 500, "fireIntervalMs": 2400, "flightMs": 1000, "gravity": 0.6 }
+  },
+  "creatures": {
+    "verdant-stickinsect": { "behavior": "walker" },
+    "verdant-oak":         { "behavior": "walker", "overrides": { "hp": 5, "speed": 45 } },
+    "volt-flytrap":        { "behavior": "turret" },
+    "volt-firefly":        { "behavior": "flyer" },
+    "ember-fireant":       { "behavior": "charger" },
+    "ember-komodo":        { "behavior": "charger", "overrides": { "hp": 6 } },
+    "tide-pufferfish":     { "behavior": "lobber" },
+    "tide-bluewhale":      { "behavior": "hopper", "overrides": { "hp": 6 } },
+    "umbra-blackwidow":    { "behavior": "hopper" },
+    "umbra-hawkmoth":      { "behavior": "flyer", "overrides": { "hp": 3 } },
+    "gale-hummingbird":    { "behavior": "flyer", "overrides": { "speed": 130 } },
+    "gale-dandelion":      { "behavior": "lobber" }
   },
   "bosses": {
     "komodrake": {
-      "name": "Komodrake",
-      "family": "ember-komodo",
-      "element": "Ember",
-      "creature": { "family": "ember-komodo", "stage": 3 },
-      "hp": 120,
-      "xp": 100,
-      "contactDamage": 1,
-      "activateRange": 560,
-      "telegraphMs": 600,
-      "bulletSpeed": 340,
-      "hopSpeedX": 200,
-      "hopSpeedY": 560,
-      "leash": 320,
+      "name": "Komodrake", "family": "ember-komodo", "hp": 120, "xp": 100, "contactDamage": 1,
+      "activateRange": 560, "telegraphMs": 600, "bulletSpeed": 340,
+      "hopSpeedX": 200, "hopSpeedY": 560, "leash": 320,
       "phases": [
-        { "untilHpFraction": 0.5, "bullets": 3, "spreadDeg": 22, "cooldownMs": 1500, "hop": false },
-        { "untilHpFraction": 0, "bullets": 5, "spreadDeg": 20, "cooldownMs": 1100, "hop": true }
+        { "untilHpFraction": 0.5, "pattern": "aimed", "bullets": 3, "spreadDeg": 22, "cooldownMs": 1500, "hop": false },
+        { "untilHpFraction": 0,   "pattern": "aimed", "bullets": 5, "spreadDeg": 20, "cooldownMs": 1100, "hop": true }
+      ]
+    },
+    "abyssalon": {
+      "name": "Abyssalon", "family": "tide-bluewhale", "hp": 170, "xp": 160, "contactDamage": 1,
+      "activateRange": 560, "telegraphMs": 650, "bulletSpeed": 290,
+      "hopSpeedX": 170, "hopSpeedY": 520, "leash": 300,
+      "phases": [
+        { "untilHpFraction": 0.6, "pattern": "ring",  "bullets": 10, "spreadDeg": 0,  "cooldownMs": 1700, "hop": false },
+        { "untilHpFraction": 0.3, "pattern": "aimed", "bullets": 5,  "spreadDeg": 20, "cooldownMs": 1250, "hop": true },
+        { "untilHpFraction": 0,   "pattern": "rain",  "bullets": 7,  "spreadDeg": 0,  "cooldownMs": 1300, "hop": true }
+      ]
+    },
+    "atroposphinx": {
+      "name": "Atroposphinx", "family": "umbra-hawkmoth", "hp": 210, "xp": 220, "contactDamage": 1,
+      "activateRange": 560, "telegraphMs": 550, "bulletSpeed": 350,
+      "hopSpeedX": 230, "hopSpeedY": 600, "leash": 340,
+      "phases": [
+        { "untilHpFraction": 0.66, "pattern": "aimed", "bullets": 3,  "spreadDeg": 20, "cooldownMs": 1150, "hop": true },
+        { "untilHpFraction": 0.33, "pattern": "rain",  "bullets": 8,  "spreadDeg": 0,  "cooldownMs": 1250, "hop": false },
+        { "untilHpFraction": 0,    "pattern": "ring",  "bullets": 12, "spreadDeg": 0,  "cooldownMs": 1050, "hop": true }
       ]
     }
   }

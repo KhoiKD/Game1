@@ -25,3 +25,6 @@ export const ENEMY_BULLET_DAMAGE = 1;
 // Player weapons are defined in src/data/weapons.json.
 // Distance from the weapon pivot to where projectiles appear.
 export const MUZZLE_OFFSET = 22;
+
+/** Distance between shots in a boss rain attack; wide enough to stand between them. */
+export const BOSS_RAIN_SPACING = 84;

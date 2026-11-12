@@ -9,6 +9,7 @@ import {
 import type { FamilyInfo } from '../systems/spirits';
 import rawBalance from './balance.json';
 import rawCreatures from './creatures.json';
+import rawLore from './creature-lore.json';
 import { ELEMENTS, isElement } from './elementData';
 import { RARITIES, type Rarity } from './weaponData';
 
@@ -122,4 +123,11 @@ export function creatureName(ref: CreatureRef): string {
 
 export function primaryElement(familyId: string): Element {
   return getFamily(familyId).elements[0]!;
+}
+
+const lore = rawLore as Record<string, string>;
+
+/** A short lore line for a creature by name, or null if it has none yet. */
+export function loreFor(creatureName: string): string | null {
+  return lore[creatureName] ?? null;
 }

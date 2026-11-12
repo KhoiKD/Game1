@@ -23,7 +23,13 @@ export interface EnemyContext {
   /** Player centre in world coordinates. */
   player: Vec2;
   rng: Rng;
-  fire(from: Vec2, dir: Vec2, speed: number): void;
+  /** `gravity` (0 to 1 of world gravity) makes the shot arc; omit it for a straight shot. */
+  fire(from: Vec2, dir: Vec2, speed: number, gravity?: number): void;
+}
+
+/** Texture key for an enemy shape in an element's colours (see BootScene). */
+export function enemyTexture(shape: string, element: Element | null): string {
+  return `enemy-${shape}-${element ?? 'none'}`;
 }
 
 const HIT_FLASH_MS = 70;
@@ -42,7 +48,11 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
   readonly element: Element | null;
   /** The creature this enemy is. Enemies with one are weakened at zero health and can be captured. */
   readonly creature: CreatureRef | null;
+  /** Drop table rolled when it is defeated. */
+  readonly dropTable: string;
   readonly maxHp: number;
+  /** Experience for defeating or capturing it, before the tier multiplier. */
+  readonly xp: number;
   readonly contactDamage: number;
   hp: number;
   /** Status meters and running statuses. The scene updates this on hits and each frame. */
@@ -63,18 +73,21 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
     scene: Phaser.Scene,
     def: EnemyDef,
     texture: string,
-    stats: { hp: number; contactDamage: number; element: Element | null; creature?: CreatureRef },
+    stats: { hp: number; xp: number; contactDamage: number; element: Element | null; creature?: CreatureRef; dropTable: string; size?: number },
   ) {
     super(scene, def.x, def.y, texture);
     this.enemyId = def.id;
     this.kind = def.kind;
     this.element = stats.element;
     this.creature = stats.creature ?? null;
+    this.dropTable = stats.dropTable;
+    this.xp = stats.xp;
+    this.setScale(stats.size ?? 1);
     this.baseTexture = texture;
     this.maxHp = stats.hp;
     this.hp = stats.hp;
     this.contactDamage = stats.contactDamage;
-    this.setPosition(def.x, def.y - this.height / 2 - 1);
+    this.setPosition(def.x, def.y - this.displayHeight / 2 - 1);
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setDepth(3);
@@ -93,6 +106,11 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
   /** How resistant this enemy is to status build-up. */
   get statusResistance(): StatusScale {
     return this.statusScale;
+  }
+
+  /** Shows or hides the telegraph look: every ranged or charging attack warns before it lands. */
+  protected showWarning(on: boolean): void {
+    this.setTexture(on ? `${this.baseTexture}-warn` : this.baseTexture);
   }
 
   /** True while the enemy sits at zero health waiting to be captured. */
@@ -163,7 +181,7 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   /** Keeps the badge above the enemy and redraws it only when its contents change. */
   private refreshBadge(time: number): void {
-    this.badge.setPosition(this.x, this.y - this.height / 2 - 10);
+    this.badge.setPosition(this.x, this.y - this.displayHeight / 2 - 10);
     const statuses = activeStatuses(this.status, time);
     const key = statuses.join(',');
     if (key === this.badgeKey && this.badge.commandBuffer.length > 0) return;
