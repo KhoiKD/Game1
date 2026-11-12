@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { RARITIES } from '../data/weaponData';
+import { getSession } from '../state/session';
 import { RARITY_COLOR } from '../ui/rarity';
 
 /**
@@ -120,7 +121,11 @@ export class BootScene extends Phaser.Scene {
       g.fillStyle(0xffe3e3).fillCircle(5, 5, 2);
     });
 
-    this.scene.start('Level');
+    // New players pick a class first; a stage in progress resumes; otherwise the hub.
+    const session = getSession();
+    if (!session.profile.classId) this.scene.start('ClassSelect');
+    else if (session.run) this.scene.start('Level', { stageId: session.run.stageId, tier: session.run.tier });
+    else this.scene.start('Hub');
   }
 
   private makeTexture(
@@ -129,6 +134,7 @@ export class BootScene extends Phaser.Scene {
     height: number,
     draw: (g: Phaser.GameObjects.Graphics) => void,
   ): void {
+    if (this.textures.exists(key)) return; // Boot runs again after a save reset
     const g = this.make.graphics({ x: 0, y: 0 }, false);
     draw(g);
     g.generateTexture(key, width, height);

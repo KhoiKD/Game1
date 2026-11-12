@@ -36,11 +36,16 @@ export interface RunState {
   readonly spirits: SpiritCollection;
   /** The spirits as last banked. Death restores them. */
   readonly securedSpirits: SpiritCollection;
+  /** Experience earned in total. */
+  readonly xp: number;
+  /** Experience as last banked. Death restores it. */
+  readonly securedXp: number;
 }
 
 export function createRunState(
   inventory: Inventory = createInventory(),
   spirits: SpiritCollection = emptyCollection(),
+  xp = 0,
 ): RunState {
   return {
     checkpointId: null,
@@ -53,6 +58,8 @@ export function createRunState(
     securedInventory: inventory,
     spirits,
     securedSpirits: spirits,
+    xp,
+    securedXp: xp,
   };
 }
 
@@ -86,12 +93,19 @@ export function setSpirits(state: RunState, spirits: SpiritCollection): RunState
   return { ...state, spirits };
 }
 
+/** Adds experience. Unsecured until banked. */
+export function addXp(state: RunState, amount: number): RunState {
+  if (amount <= 0) return state;
+  return { ...state, xp: state.xp + amount };
+}
+
 function hasUnsecured(state: RunState): boolean {
   return (
     state.unsecured.length > 0 ||
     state.unsecuredDefeated.length > 0 ||
     state.inventory !== state.securedInventory ||
-    state.spirits !== state.securedSpirits
+    state.spirits !== state.securedSpirits ||
+    state.xp !== state.securedXp
   );
 }
 
@@ -106,6 +120,7 @@ export function secureAll(state: RunState): RunState {
     unsecuredDefeated: [],
     securedInventory: state.inventory,
     securedSpirits: state.spirits,
+    securedXp: state.xp,
   };
 }
 
@@ -130,6 +145,7 @@ export function die(state: RunState): RunState {
     unsecuredDefeated: [],
     inventory: state.securedInventory,
     spirits: state.securedSpirits,
+    xp: state.securedXp,
   };
 }
 

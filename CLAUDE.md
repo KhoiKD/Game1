@@ -23,7 +23,8 @@ Web-based side-scrolling run-and-gun with creature lore and looter-shooter depth
 ```
 src/
   main.ts            # Phaser config/boot
-  scenes/            # Boot, Menu, Level, Hub, Inventory, GameOver
+  scenes/            # Boot, ClassSelect, Hub, Level, Inventory, Spirits
+  state/             # session: the live profile and stage run, loaded from and written to the save
   entities/          # Player, Enemy (base), Boss, Projectile, Pickup
   systems/           # combat, loot, perks, elements, creatures, progression, save
   data/              # JSON: weapons, perks, creatures, enemies, levels, lore
@@ -43,7 +44,7 @@ Rules:
 **Player**
 - Run, jump (variable height), crouch/prone, free aim toward the mouse pointer (360°), hold-to-fire or tap-to-fire per weapon.
 - Health bar (small pool), brief i-frames on hit, respawn at last checkpoint.
-- Controls: WASD/arrows to move, Space to jump, mouse to aim, left click to fire, right click for creature ability, Q/E to swap weapon/creature, R to reload. No gamepad in v1.
+- Controls: WASD/arrows to move, Space to jump, mouse to aim, left click to fire, right click for the spirit ability, Shift for the class ability, Q/E to swap weapon, R to reload, F to capture, I inventory, C spirits, Esc to the hub. No gamepad in v1.
 - Aim reticle replaces the OS cursor in-game. Aim angle is computed from the player's weapon pivot to the pointer in world coordinates (account for camera scroll).
 - Single-player only. No online features, co-op, or leaderboards.
 
@@ -125,10 +126,14 @@ Rules:
 ## Loot & Progression
 - Drops: enemies, chests, bosses, secrets. Seeded RNG; drop tables in `data/drops.json`.
 - Inventory: weapons, bonds, consumables, materials. Weapons only so far (`systems/inventory.ts`): 20 carried, 3 equipped, equipped weapons cannot be discarded. The inventory follows the checkpoint rule as a snapshot: death restores the inventory as last banked, including discards and loadout changes.
-- Power progression: level plus a gear-score-style "Power" stat that gates stage difficulty tiers.
-- Classes (3 to start): each has a unique ability, passive, and weapon affinity. Placeholder: Vanguard, Skirmisher, Warden.
-- Hub scene: manage loadout, bonds, shops, stage select.
-- Save: versioned JSON in localStorage with migration function.
+- **Levels:** enemies give experience (`xp` in `enemies.json`, times the tier's `xpMult`). Level L to L+1 costs `xp.base x L`. Each level adds 2% weapon damage; every 5 levels adds 1 max health. Experience follows the checkpoint rule like everything else.
+- **Power:** average `weaponPower` (by rarity) of the three weapon slots, an empty slot counting zero, plus the player's level (`systems/progression.ts`).
+- **Tiers:** each stage has tiers from `progression.json`. A tier opens when the tier below is cleared and Power meets `requiredPower`. Higher tiers multiply enemy health and experience, and the tier number is the stage level that scales the boss spirit.
+- **Classes** (`classes.json`): Vanguard (+1 health; spread gun and melee burst; Bulwark invulnerability), Skirmisher (speed and reload; sidearm and pulse rifle; Slipstream dash), Warden (status build-up and spirit cooldown; beam, charge cannon, launcher; Stasis Pulse slow). Every weapon archetype belongs to exactly one class (a test enforces this). Class can be changed in the hub; weapons, spirits, and level are shared across classes.
+- **Bonuses:** `withClassAndLevel` folds class and level into the spirit bonuses, and `applyBonuses` applies the result to each weapon. `LevelScene.refreshBonuses` is the one place that recomputes them.
+- **Hub** (`scenes/HubScene.ts`): character summary, stage and tier select, inventory (I), spirits (C, always swappable here), class change (K). No shops or currency yet.
+- **Flow:** Boot goes to class select for a new player, to the stage in progress if there is one, otherwise the hub. In a stage, Esc returns to the hub: one press after the stage is cleared, two presses mid-stage, which abandons the stage and loses anything at risk.
+- **Save** (`systems/save.ts`, version 5): `profile` (class, experience, inventory, spirits, highest tier cleared per stage) plus `run` (stage, tier, checkpoint, banked pickups and defeats), which is null in the hub or before the first checkpoint. Versions 1 to 4 migrate to a profile with no class and a tier 1 run. `state/session.ts` holds the live profile and run; scenes change them through `setProfile` and `setRun` and call `saveSession`.
 
 ## Milestones (build in vertical slices; commit after each)
 1. (done) Player movement, jump, mouse aiming, shoot, flat test level, placeholder art.
@@ -138,7 +143,7 @@ Rules:
 5. (done) Loot drops, inventory UI, perk rolling (with Vitest coverage). Enemies drop weapons from `drops.json` tables; rarity sets perk slots and the damage roll; perks come from `perks.json`. The player starts with two starter weapons, carries up to 20, and equips 3. Perks are stat modifiers only; on-hit and on-kill perks come with milestone 6.
 6. (done) Element system and status effects. Six-element wheel, damage formula with crits, six statuses applied by build-up, enemy elements with a pip above each enemy, floating damage numbers. Weapon stats gained `critChance`, `statusBuildup`, and `killRefund`, with perks for each. Statuses affect enemies only; the player cannot be afflicted yet.
 7. (done) Spirit capture, equipped-spirit perks and abilities, evolution, stat balancing formula and simulation test. Creatures are weakened at zero health and captured with F; spirits give stat perks, elemental affinity, and a right-click ability; element slots unlock by attunement; the balance simulation covers all 150 creatures. Abilities are five generic effects chosen by role, not yet the unique ability each creature's text describes.
-8. Classes, hub, progression, save/load.
+8. (done) Classes, hub, progression, save/load. Three classes with a passive, favoured weapon archetypes, and a Shift ability; a hub for loadout, spirits, class, and stage select; player levels from experience; a Power score that unlocks harder tiers of a stage; saves split into a profile and the stage in progress. The hub is a menu, not a walkable area, and has no shops yet.
 9. Content pass: 3 stages, 6 enemy types, 3 bosses, 20 weapons, first 12 creature families (36 creatures) fully implemented. Remaining families added in batches by element.
 10. Audio, polish, performance, deploy.
 
@@ -152,7 +157,7 @@ Rules:
 - Enemies: extend `entities/Enemy.ts` and implement `act()`. Every ranged attack needs a telegraph beat (a `-warn` texture) before it fires. Do not name a field `originX`/`originY`; Phaser sprites already use those.
 - `window.__tamerunner` exposes the Phaser game for console debugging and headless smoke tests.
 - Save data is versioned (`SAVE_VERSION` in `systems/save.ts`). Changing its shape means bumping the version and adding a migration case.
-- Dev shortcut: F9 clears the save and restarts the level.
+- Dev shortcut: F9 (in a stage or the hub) erases the save and restarts from class select.
 - Read one-shot key presses (swap, reload) from `keydown-<KEY>` events, not `JustDown` polling, which misses taps shorter than a frame.
 - Read clicks from `pointerdown` events for the same reason.
 - Overlay screens (inventory, spirits) are their own scene launched over the paused level; they hand their result back through an `onClose` callback. All inventory changes in the level go through `applyInventory`.

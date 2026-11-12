@@ -12,7 +12,8 @@ import {
 import { balance, creatureName, findFamily, getFamily } from '../data/creatureData';
 import { elementRules } from '../data/elementData';
 import { getBossStats, getEnemyStats } from '../data/enemyData';
-import { resolveWeaponInstance, rollDropFor, sanitizeInventory, starterInventory } from '../data/lootData';
+import { resolveWeaponInstance, rollDropFor } from '../data/lootData';
+import { findClass, getStage, progression } from '../data/progressionData';
 import type { ResolvedWeapon } from '../data/weaponData';
 import { Boss } from '../entities/Boss';
 import { Bullet } from '../entities/Bullet';
@@ -34,7 +35,7 @@ import type { WeaponInstance } from '../systems/loot';
 import {
   activateCheckpoint,
   collectPickup,
-  createRunState,
+  addXp,
   defeatEnemy,
   die,
   hasCollected,
@@ -48,7 +49,9 @@ import {
   unsecuredWeaponCount,
   type RunState,
 } from '../systems/runState';
-import { clearSave, getStorage, loadSave, restoreRun, serializeRun, writeSave } from '../systems/save';
+import { levelProgress, powerScore, tierRule, withClassAndLevel, type ClassDef } from '../systems/progression';
+import { markCleared, profileFromRun, runStateFrom, savedRunFrom } from '../systems/save';
+import { getSession, resetSession, saveSession, setProfile, setRun } from '../state/session';
 import {
   chargeFraction,
   createWeaponState,
@@ -70,7 +73,6 @@ import {
   equippedSpirits,
   levelOf,
   playerBonuses,
-  sanitizeCollection,
   spiritName,
   type ActiveAbility,
   type PlayerBonuses,
@@ -83,12 +85,9 @@ import { createRng, type Rng } from '../util/rng';
 import type { InventorySceneData } from './InventoryScene';
 import type { SpiritsSceneData } from './SpiritsScene';
 
-const LEVEL_ID = 'level1';
 const FALL_MARGIN = 96; // how far below the map the player may fall before dying
 const PLAYER_HALF_HEIGHT = 32;
 const BOSS_BAR_WIDTH = 520;
-/** Difficulty level of this stage; boss spirits scale with it. */
-const STAGE_LEVEL = 1;
 /** How close to the active checkpoint the player must stand to swap spirits. */
 const CHECKPOINT_SWAP_RANGE = 96;
 
@@ -137,6 +136,15 @@ export class LevelScene extends Phaser.Scene {
   private weaponUids: string[] = [];
   private groundLoot: GroundLoot[] = [];
   private stageCleared = false;
+  private stageId = 'level1';
+  /** Difficulty tier of this run. Scales enemy health and experience, and the boss spirit. */
+  private tier = 1;
+  private classDef: ClassDef | null = null;
+  private classReadyAt = 0;
+  private classHud!: Phaser.GameObjects.Text;
+  private classHudText = '';
+  /** Leaving mid-stage needs a second Esc before this time. */
+  private leaveArmedUntil = 0;
   /** Perks from the equipped spirits, applied to weapons, speed, and health. */
   private bonuses: PlayerBonuses = NO_BONUSES;
   private ability: ActiveAbility | null = null;
@@ -164,7 +172,17 @@ export class LevelScene extends Phaser.Scene {
     super('Level');
   }
 
+  init(data: { stageId?: string; tier?: number }): void {
+    const saved = getSession().run;
+    this.stageId = data.stageId ?? saved?.stageId ?? progression.stages[0]!.id;
+    this.tier = data.tier ?? saved?.tier ?? 1;
+  }
+
   create(): void {
+    this.classDef = findClass(getSession().profile.classId);
+    this.classReadyAt = 0;
+    this.classHudText = '';
+    this.leaveArmedUntil = 0;
     this.pickupSprites.clear();
     this.checkpointSprites.clear();
     this.toastText = undefined;
@@ -185,7 +203,7 @@ export class LevelScene extends Phaser.Scene {
     this.pendingReload = false;
     this.rng = createRng(Date.now());
 
-    const map = this.make.tilemap({ key: 'level1' });
+    const map = this.make.tilemap({ key: getStage(this.stageId).map });
     const tileset = map.addTilesetImage('tiles', 'tiles');
     if (!tileset) throw new Error('Tileset "tiles" not found in level1');
     const ground = map.createLayer('ground', tileset, 0, 0);
@@ -286,9 +304,11 @@ export class LevelScene extends Phaser.Scene {
 
     this.buildHud();
 
-    this.input.keyboard?.on('keydown-F9', () => {
-      clearSave(getStorage());
-      this.scene.restart();
+    onPress('SHIFT', () => this.useClassAbility());
+    onPress('ESC', () => this.requestLeave());
+    onPress('F9', () => {
+      resetSession();
+      this.scene.start('Boot');
     });
   }
 
@@ -321,28 +341,29 @@ export class LevelScene extends Phaser.Scene {
     this.refreshBossBar();
     this.drawCapturePrompts(time);
     this.refreshSpiritHud(time);
+    this.refreshClassHud(time);
     if (this.player.y > this.mapHeightPx + FALL_MARGIN) this.handleDeath();
   }
 
   // ---- run state ---------------------------------------------------------
 
   private initialRunState(): RunState {
-    const save = loadSave(getStorage());
+    // Resume at the saved checkpoint only if it belongs to this stage and tier.
+    const session = getSession();
+    const saved = session.run;
     const resumable =
-      save !== null &&
-      save.levelId === LEVEL_ID &&
-      this.level.checkpoints.some((cp) => cp.id === save.checkpointId);
-    const starter = starterInventory();
-    if (!resumable) return createRunState(starter);
-    // A save can refer to weapons or perks that have since been removed from the data.
-    const restored = restoreRun(save, starter);
-    const inventory = sanitizeInventory(restored.inventory);
-    const spirits = sanitizeCollection(restored.spirits, findFamily);
-    return { ...restored, inventory, securedInventory: inventory, spirits, securedSpirits: spirits };
+      saved !== null &&
+      saved.stageId === this.stageId &&
+      saved.tier === this.tier &&
+      this.level.checkpoints.some((cp) => cp.id === saved.checkpointId);
+    return runStateFrom(session.profile, resumable ? saved : null);
   }
 
   private persist(): void {
-    writeSave(getStorage(), serializeRun(LEVEL_ID, this.run));
+    // Only banked progress is saved: the profile keeps secured weapons, spirits, and experience.
+    setProfile(profileFromRun(getSession().profile, this.run));
+    setRun(savedRunFrom(this.stageId, this.tier, this.run));
+    saveSession();
   }
 
   // ---- level objects -----------------------------------------------------
@@ -415,11 +436,15 @@ export class LevelScene extends Phaser.Scene {
   }
 
   private createEnemy(def: EnemyDef): Enemy {
+    // Higher tiers make every enemy tougher.
+    const hpMult = tierRule(this.tier, progression).enemyHpMult;
     if (def.boss) {
-      this.boss = new Boss(this, def, getBossStats(def.kind));
+      const bossStats = getBossStats(def.kind);
+      this.boss = new Boss(this, def, { ...bossStats, hp: bossStats.hp * hpMult });
       return this.boss;
     }
-    const stats = getEnemyStats(def.kind);
+    const base = getEnemyStats(def.kind);
+    const stats = { ...base, hp: base.hp * hpMult };
     return stats.behavior === 'walker' ? new Walker(this, def, stats) : new Turret(this, def, stats);
   }
 
@@ -599,7 +624,7 @@ export class LevelScene extends Phaser.Scene {
     const ref = enemy.creature;
     if (!ref) return;
     const family = getFamily(ref.family);
-    const perkMult = enemy === this.boss ? bossPerkMult(STAGE_LEVEL, balance) : 1;
+    const perkMult = enemy === this.boss ? bossPerkMult(this.tier, balance) : 1;
     const result = captureSpirit(this.run.spirits, family, ref.stage, perkMult, balance);
     this.applySpirits(result.collection);
 
@@ -667,8 +692,15 @@ export class LevelScene extends Phaser.Scene {
 
   /** Recomputes what the equipped spirits give and applies it to speed, health, and weapons. */
   private refreshBonuses(force: boolean): void {
-    const next = playerBonuses(this.run.spirits, findFamily, balance);
-    this.ability = activeAbility(this.run.spirits, findFamily, balance);
+    const next = withClassAndLevel(
+      playerBonuses(this.run.spirits, findFamily, balance),
+      this.classDef,
+      this.playerLevel(),
+      progression,
+    );
+    const ability = activeAbility(this.run.spirits, findFamily, balance);
+    const classCooldown = this.classDef?.passive.spiritCooldownMult ?? 1;
+    this.ability = ability ? { ...ability, cooldownMs: ability.cooldownMs * classCooldown } : null;
     this.spiritHudText = '';
     if (!force && JSON.stringify(next) === JSON.stringify(this.bonuses)) return;
     const hpGain = next.maxHpBonus - this.bonuses.maxHpBonus;
@@ -780,6 +812,98 @@ export class LevelScene extends Phaser.Scene {
     this.floatText(this.player.x, this.player.y - 52, ability.name, css(color), 14);
   }
 
+  // ---- class, level, and leaving the stage ---------------------------------
+
+  private playerLevel(): number {
+    return levelProgress(this.run.xp, progression).level;
+  }
+
+  /** Experience for a defeated or captured enemy, scaled by the tier. */
+  private grantXp(enemy: Enemy): void {
+    const base = enemy === this.boss ? getBossStats(enemy.kind).xp : getEnemyStats(enemy.kind).xp;
+    const before = this.playerLevel();
+    this.run = addXp(this.run, Math.round(base * tierRule(this.tier, progression).xpMult));
+    if (this.stageCleared) {
+      this.run = secureAll(this.run);
+      this.persist();
+    }
+    const after = this.playerLevel();
+    if (after > before) {
+      this.toast(`Level ${after}`);
+      this.refreshBonuses(false);
+    }
+    this.refreshHud();
+  }
+
+  /** Shift: the class ability. */
+  private useClassAbility(): void {
+    const def = this.classDef;
+    const time = this.time.now;
+    if (!def || time < this.classReadyAt) return;
+    const ability = def.ability;
+    this.classReadyAt = time + ability.cooldownMs;
+    const guard = (durationMs: number): void => {
+      this.health = { ...this.health, invulnerableUntil: Math.max(this.health.invulnerableUntil, time + durationMs) };
+    };
+    switch (ability.effect) {
+      case 'guard':
+        guard(ability.durationMs ?? 0);
+        break;
+      case 'dash': {
+        const direction = this.player.moveDirection || this.player.facing;
+        this.player.dash(direction, ability.speed ?? 0, ability.durationMs ?? 0, time);
+        guard((ability.durationMs ?? 0) + 100);
+        break;
+      }
+      case 'stasis': {
+        const radius = ability.radius ?? 0;
+        const ring = this.add.graphics().setDepth(4);
+        ring.fillStyle(ELEMENT_COLOR.Gale, 0.3).fillCircle(this.player.x, this.player.y, radius);
+        this.tweens.add({ targets: ring, alpha: 0, duration: 300, onComplete: () => ring.destroy() });
+        const slowHit: HitProfile = { ...ABILITY_HIT, element: 'Gale', damage: 0.25, statusBuildup: 1000 };
+        for (const child of [...this.enemies.getChildren()]) {
+          const enemy = child as Enemy;
+          if (enemy.active && Math.hypot(enemy.x - this.player.x, enemy.y - this.player.y) <= radius) {
+            this.hitEnemy(enemy, slowHit, FIELD_HIT);
+          }
+        }
+        break;
+      }
+    }
+    this.floatText(this.player.x, this.player.y - 52, ability.name, '#ffffff', 14);
+  }
+
+  /** Esc: back to the hub. Mid-stage it takes two presses, because anything at risk is lost. */
+  private requestLeave(): void {
+    const time = this.time.now;
+    if (!this.stageCleared && time > this.leaveArmedUntil) {
+      this.leaveArmedUntil = time + 3000;
+      this.toast('Press Esc again to leave for the hub · anything at risk is lost');
+      return;
+    }
+    if (!this.stageCleared) this.run = die(this.run);
+    setProfile(profileFromRun(getSession().profile, this.run));
+    setRun(null);
+    saveSession();
+    this.input.setDefaultCursor('default');
+    this.scene.start('Hub');
+  }
+
+  private refreshClassHud(time: number): void {
+    const progress = levelProgress(this.run.xp, progression);
+    const xp = progress.needed > 0 ? `XP ${progress.into}/${progress.needed}` : 'max level';
+    const power = powerScore(this.run.inventory, progress.level, progression);
+    let text = `Level ${progress.level} · ${xp} · Power ${power} · ${tierRule(this.tier, progression).name}`;
+    if (this.classDef) {
+      const wait = Math.max(0, this.classReadyAt - time);
+      const ready = wait === 0 ? 'ready' : `${(wait / 1000).toFixed(1)}s`;
+      text = `${this.classDef.name} ${text} · ${this.classDef.ability.name} (Shift) ${ready}`;
+    }
+    if (text === this.classHudText) return;
+    this.classHudText = text;
+    this.classHud.setText(text);
+  }
+
   private refreshSpiritHud(time: number): void {
     const first = equippedSpirits(this.run.spirits, balance)[0];
     let text = 'No spirit · weaken a creature, then press F beside it to capture';
@@ -799,11 +923,13 @@ export class LevelScene extends Phaser.Scene {
     this.run = defeatEnemy(this.run, enemy.enemyId);
     if (dropLoot) this.dropLoot(enemy.kind, enemy.x, enemy.y);
     this.grantKillXp();
+    this.grantXp(enemy);
     if (enemy === this.boss) {
       // Clearing the stage banks everything, so the win cannot be lost afterwards.
       const name = this.boss.displayName;
       this.boss = null;
       this.run = secureAll(this.run);
+      setProfile(markCleared(getSession().profile, this.stageId, this.tier));
       this.persist();
       this.killAll(this.enemyBullets);
       this.refreshHud();
@@ -1036,6 +1162,7 @@ export class LevelScene extends Phaser.Scene {
     this.healthPips = this.add.graphics().setScrollFactor(0).setDepth(100);
     this.weaponHud = this.add.text(16, 78, '', { ...style, color: '#e6ebf5' }).setScrollFactor(0).setDepth(100);
     this.spiritHud = this.add.text(16, 100, '', style).setScrollFactor(0).setDepth(100);
+    this.classHud = this.add.text(16, 122, '', style).setScrollFactor(0).setDepth(100);
     this.captureGfx = this.add.graphics().setDepth(5);
     this.capturePrompt = this.add
       .text(0, 0, '', { ...style, color: '#ffffff', stroke: '#000000', strokeThickness: 3 })
@@ -1095,9 +1222,9 @@ export class LevelScene extends Phaser.Scene {
   private showStageClear(bossName: string): void {
     this.stageCleared = true;
     this.add
-      .text(GAME_WIDTH / 2, 110, `STAGE CLEAR · ${bossName} defeated`, {
+      .text(GAME_WIDTH / 2, 214, `STAGE CLEAR · ${bossName} defeated · Esc returns to the hub`, {
         fontFamily: 'monospace',
-        fontSize: '20px',
+        fontSize: '16px',
         color: '#7ef7a3',
         backgroundColor: '#000000aa',
         padding: { x: 12, y: 8 },
@@ -1114,7 +1241,8 @@ export class LevelScene extends Phaser.Scene {
       this.toastText.destroy();
     }
     const text = this.add
-      .text(GAME_WIDTH / 2, 72, message, {
+      // Below the HUD lines so a message never covers them.
+      .text(GAME_WIDTH / 2, 172, message, {
         fontFamily: 'monospace',
         fontSize: '16px',
         color: '#ffffff',

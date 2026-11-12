@@ -10,6 +10,8 @@ export interface WalkerStats {
   /** The creature this enemy is; its spirit can be captured. Absent for enemies that cannot be captured. */
   creature?: CreatureRef;
   hp: number;
+  /** Experience for defeating or capturing it. */
+  xp: number;
   contactDamage: number;
   speed: number;
   patrolRange: number;
@@ -20,6 +22,7 @@ export interface TurretStats {
   element: Element | null;
   creature?: CreatureRef;
   hp: number;
+  xp: number;
   contactDamage: number;
   range: number;
   telegraphMs: number;
@@ -44,6 +47,7 @@ export interface BossStats {
   element: Element | null;
   creature?: CreatureRef;
   hp: number;
+  xp: number;
   contactDamage: number;
   activateRange: number;
   telegraphMs: number;

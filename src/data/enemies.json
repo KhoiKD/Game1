@@ -5,6 +5,7 @@
       "element": "Verdant",
       "creature": { "family": "verdant-stickinsect", "stage": 1 },
       "hp": 3,
+      "xp": 10,
       "contactDamage": 1,
       "speed": 70,
       "patrolRange": 96
@@ -14,6 +15,7 @@
       "element": "Volt",
       "creature": { "family": "volt-flytrap", "stage": 1 },
       "hp": 4,
+      "xp": 15,
       "contactDamage": 1,
       "range": 520,
       "telegraphMs": 450,
@@ -28,6 +30,7 @@
       "element": "Ember",
       "creature": { "family": "ember-komodo", "stage": 3 },
       "hp": 120,
+      "xp": 100,
       "contactDamage": 1,
       "activateRange": 560,
       "telegraphMs": 600,

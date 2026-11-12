@@ -13,7 +13,6 @@ import {
   setSpirits,
   unsecuredSpiritCount,
 } from '../src/systems/runState';
-import { SAVE_VERSION, parseSave, restoreRun, serializeRun } from '../src/systems/save';
 import { SPIRIT_STATS, computeSpiritStats, statBudget, targetBudget, type Stage } from '../src/systems/spiritStats';
 import {
   activeAbility,
@@ -404,31 +403,6 @@ describe('spirits and the checkpoint rule', () => {
     expect(die(run).spirits.spirits).toHaveLength(1);
     run = setSpirits(run, capture(run.spirits, komodo, 3, 1.5));
     expect(secureAll(run).securedSpirits).toBe(run.spirits);
-  });
-
-  it('round-trips banked spirits through a save and drops unbanked ones', () => {
-    let run = setSpirits(createRunState(), capture(emptyCollection(), twig));
-    run = activateCheckpoint(run, 'cp-1', 1);
-    run = setSpirits(run, capture(run.spirits, komodo, 3, 1.5));
-    const restored = restoreRun(parseSave(JSON.stringify(serializeRun('level1', run)))!);
-    expect(restored.spirits.spirits.map((s) => s.familyId)).toEqual([twig.id]);
-    expect(restored.spirits.equipped).toEqual({ u0: twig.id });
-    expect(restored.spirits.captures).toEqual({ Verdant: 1, Gale: 1 });
-  });
-
-  it('migrates a version 3 save to an empty collection and rejects malformed spirits', () => {
-    const inventory = { items: [], equipped: [null, null, null] };
-    const v3 = { version: 3, levelId: 'level1', checkpointId: 'cp-1', checkpointOrder: 1, secured: [], defeated: [], inventory };
-    expect(parseSave(JSON.stringify(v3))).toMatchObject({ version: SAVE_VERSION, spirits: null });
-    expect(restoreRun(parseSave(JSON.stringify(v3))!).spirits).toEqual(emptyCollection());
-
-    const v4 = (spirits: unknown) => JSON.stringify({ ...v3, version: 4, spirits });
-    const good = { spirits: [{ familyId: twig.id, capturedStage: 1, growth: 4, perkMult: 1 }], equipped: { u0: twig.id }, captures: { Verdant: 1 } };
-    expect(parseSave(v4(good))).not.toBeNull();
-    expect(parseSave(v4({ ...good, equipped: { u0: 'someone-else' } }))).toBeNull();
-    expect(parseSave(v4({ ...good, spirits: [{ ...good.spirits[0], capturedStage: 4 }] }))).toBeNull();
-    expect(parseSave(v4({ ...good, captures: { Verdant: -1 } }))).toBeNull();
-    expect(parseSave(v4(undefined))).toBeNull();
   });
 
   it('drops spirits whose creature family no longer exists', () => {

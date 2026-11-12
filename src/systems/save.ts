@@ -4,53 +4,83 @@ import type { RunState } from './runState';
 import { emptyCollection, type Spirit, type SpiritCollection } from './spirits';
 
 export const SAVE_KEY = 'tamerunner.save';
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
-/** What persists between page loads: the run as it stood when last secured. */
-export interface SaveData {
-  version: number;
-  levelId: string;
+/** What the player keeps between stages. */
+export interface Profile {
+  /** Null until a class has been chosen. */
+  classId: string | null;
+  xp: number;
+  inventory: Inventory;
+  spirits: SpiritCollection;
+  /** Highest tier cleared per stage id. */
+  cleared: Record<string, number>;
+}
+
+/** A stage in progress, as it stood at the last checkpoint. */
+export interface SavedRun {
+  stageId: string;
+  tier: number;
   checkpointId: string;
   checkpointOrder: number;
   secured: string[];
-  /** Enemy ids whose defeat is banked (added in version 2). */
   defeated: string[];
-  /** Banked inventory (added in version 3). Null in saves migrated from older versions. */
-  inventory: Inventory | null;
-  /** Banked spirits (added in version 4). Null in saves migrated from older versions. */
-  spirits: SpiritCollection | null;
 }
 
-/** Returns null before the first checkpoint: there is nothing to resume yet. */
-export function serializeRun(levelId: string, run: RunState): SaveData | null {
+export interface SaveData {
+  version: number;
+  profile: Profile;
+  /** Null when the player is in the hub or has not reached a checkpoint yet. */
+  run: SavedRun | null;
+}
+
+export function newProfile(inventory: Inventory): Profile {
+  return { classId: null, xp: 0, inventory, spirits: emptyCollection(), cleared: {} };
+}
+
+/** The profile as banked by a run: only secured weapons, spirits, and experience carry over. */
+export function profileFromRun(profile: Profile, run: RunState): Profile {
+  return { ...profile, xp: run.securedXp, inventory: run.securedInventory, spirits: run.securedSpirits };
+}
+
+/** Records a cleared tier, keeping the highest. */
+export function markCleared(profile: Profile, stageId: string, tier: number): Profile {
+  if ((profile.cleared[stageId] ?? 0) >= tier) return profile;
+  return { ...profile, cleared: { ...profile.cleared, [stageId]: tier } };
+}
+
+/** The resumable part of a run. Null before the first checkpoint: there is nothing to resume. */
+export function savedRunFrom(stageId: string, tier: number, run: RunState): SavedRun | null {
   if (run.checkpointId === null) return null;
   return {
-    version: SAVE_VERSION,
-    levelId,
+    stageId,
+    tier,
     checkpointId: run.checkpointId,
     checkpointOrder: run.checkpointOrder,
     secured: [...run.secured],
     defeated: [...run.securedDefeated],
-    inventory: copyInventory(run.securedInventory),
-    spirits: copySpirits(run.securedSpirits),
   };
 }
 
-/** `fallbackInventory` is used for saves that predate inventories. */
-export function restoreRun(save: SaveData, fallbackInventory: Inventory = createInventory()): RunState {
-  const inventory = save.inventory ? copyInventory(save.inventory) : fallbackInventory;
-  const spirits = save.spirits ? copySpirits(save.spirits) : emptyCollection();
+export function buildSave(profile: Profile, run: SavedRun | null): SaveData {
+  return { version: SAVE_VERSION, profile: copyProfile(profile), run: run ? copyRun(run) : null };
+}
+
+/** Starts or resumes a run from the profile. With a saved run, the player resumes at its checkpoint. */
+export function runStateFrom(profile: Profile, saved: SavedRun | null): RunState {
   return {
-    checkpointId: save.checkpointId,
-    checkpointOrder: save.checkpointOrder,
-    secured: [...save.secured],
+    checkpointId: saved?.checkpointId ?? null,
+    checkpointOrder: saved?.checkpointOrder ?? -1,
+    secured: saved ? [...saved.secured] : [],
     unsecured: [],
-    securedDefeated: [...save.defeated],
+    securedDefeated: saved ? [...saved.defeated] : [],
     unsecuredDefeated: [],
-    inventory,
-    securedInventory: inventory,
-    spirits,
-    securedSpirits: spirits,
+    inventory: profile.inventory,
+    securedInventory: profile.inventory,
+    spirits: profile.spirits,
+    securedSpirits: profile.spirits,
+    xp: profile.xp,
+    securedXp: profile.xp,
   };
 }
 
@@ -69,34 +99,66 @@ function copyInventory(inventory: Inventory): Inventory {
   };
 }
 
+function copyProfile(profile: Profile): Profile {
+  return {
+    classId: profile.classId,
+    xp: profile.xp,
+    inventory: copyInventory(profile.inventory),
+    spirits: copySpirits(profile.spirits),
+    cleared: { ...profile.cleared },
+  };
+}
+
+function copyRun(run: SavedRun): SavedRun {
+  return { ...run, secured: [...run.secured], defeated: [...run.defeated] };
+}
+
 /**
  * Migration hook. Each time the save schema changes, bump SAVE_VERSION and add
  * a case here that upgrades older versions. Unknown or invalid data yields null.
+ * `starter` supplies weapons for saves that predate inventories.
  */
-export function migrateSave(data: unknown): SaveData | null {
+export function migrateSave(data: unknown, starter: Inventory = createInventory()): SaveData | null {
   if (typeof data !== 'object' || data === null) return null;
   const d = data as Record<string, unknown>;
-  if (!hasBaseFields(d)) return null;
+  if (d.version === 5) {
+    return isProfile(d.profile) && (d.run === null || isSavedRun(d.run)) ? buildSave(d.profile, d.run) : null;
+  }
+
+  // Versions 1 to 4 stored one flat record for a single level.
+  if (!hasLegacyFields(d)) return null;
+  let defeated: string[] = [];
+  let inventory: Inventory = starter;
+  let spirits: SpiritCollection = emptyCollection();
   switch (d.version) {
     case 1:
-      // v1 had no enemies, so nothing was defeated.
-      return toSaveData(d, [], null, null);
+      break; // no enemies yet
     case 2:
-      // v2 had no inventory; the game supplies the starter weapons on restore.
-      return isStringArray(d.defeated) ? toSaveData(d, d.defeated, null, null) : null;
+      if (!isStringArray(d.defeated)) return null;
+      defeated = d.defeated;
+      break;
     case 3:
-      // v3 had no spirits; the collection starts empty.
-      return isStringArray(d.defeated) && isInventory(d.inventory) ? toSaveData(d, d.defeated, d.inventory, null) : null;
+      if (!isStringArray(d.defeated) || !isInventory(d.inventory)) return null;
+      defeated = d.defeated;
+      inventory = d.inventory;
+      break;
     case 4:
-      return isStringArray(d.defeated) && isInventory(d.inventory) && isSpiritCollection(d.spirits)
-        ? toSaveData(d, d.defeated, d.inventory, d.spirits)
-        : null;
+      if (!isStringArray(d.defeated) || !isInventory(d.inventory) || !isSpiritCollection(d.spirits)) return null;
+      defeated = d.defeated;
+      inventory = d.inventory;
+      spirits = d.spirits;
+      break;
     default:
       return null;
   }
+  // Older saves had no class, experience, or tiers: the player picks a class and resumes on tier 1.
+  return buildSave(
+    { classId: null, xp: 0, inventory, spirits, cleared: {} },
+    { stageId: d.levelId, tier: 1, checkpointId: d.checkpointId, checkpointOrder: d.checkpointOrder, secured: d.secured, defeated },
+  );
 }
 
-interface BaseFields {
+interface LegacyFields {
   levelId: string;
   checkpointId: string;
   checkpointOrder: number;
@@ -107,7 +169,11 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
-function hasBaseFields(d: Record<string, unknown>): d is Record<string, unknown> & BaseFields {
+function isCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function hasLegacyFields(d: Record<string, unknown>): d is Record<string, unknown> & LegacyFields {
   return (
     typeof d.levelId === 'string' &&
     typeof d.checkpointId === 'string' &&
@@ -115,6 +181,31 @@ function hasBaseFields(d: Record<string, unknown>): d is Record<string, unknown>
     Number.isFinite(d.checkpointOrder) &&
     isStringArray(d.secured)
   );
+}
+
+function isSavedRun(value: unknown): value is SavedRun {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.stageId === 'string' &&
+    typeof v.tier === 'number' &&
+    Number.isInteger(v.tier) &&
+    v.tier >= 1 &&
+    typeof v.checkpointId === 'string' &&
+    typeof v.checkpointOrder === 'number' &&
+    Number.isFinite(v.checkpointOrder) &&
+    isStringArray(v.secured) &&
+    isStringArray(v.defeated)
+  );
+}
+
+function isProfile(value: unknown): value is Profile {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  if (v.classId !== null && typeof v.classId !== 'string') return false;
+  if (!isCount(v.xp) || !isInventory(v.inventory) || !isSpiritCollection(v.spirits)) return false;
+  if (typeof v.cleared !== 'object' || v.cleared === null || Array.isArray(v.cleared)) return false;
+  return Object.values(v.cleared as Record<string, unknown>).every((tier) => isCount(tier) && Number.isInteger(tier));
 }
 
 function isWeaponInstance(value: unknown): value is WeaponInstance {
@@ -147,9 +238,7 @@ function isSpirit(value: unknown): value is Spirit {
   return (
     typeof v.familyId === 'string' &&
     (v.capturedStage === 1 || v.capturedStage === 2 || v.capturedStage === 3) &&
-    typeof v.growth === 'number' &&
-    Number.isFinite(v.growth) &&
-    v.growth >= 0 &&
+    isCount(v.growth) &&
     typeof v.perkMult === 'number' &&
     Number.isFinite(v.perkMult) &&
     v.perkMult > 0
@@ -167,33 +256,13 @@ function isSpiritCollection(value: unknown): value is SpiritCollection {
   if (!equipped.every((id) => typeof id === 'string' && ids.has(id))) return false;
   if (new Set(equipped).size !== equipped.length) return false;
   if (typeof v.captures !== 'object' || v.captures === null || Array.isArray(v.captures)) return false;
-  return Object.values(v.captures as Record<string, unknown>).every(
-    (count) => typeof count === 'number' && Number.isInteger(count) && count >= 0,
-  );
+  return Object.values(v.captures as Record<string, unknown>).every((count) => isCount(count) && Number.isInteger(count));
 }
 
-function toSaveData(
-  d: BaseFields,
-  defeated: string[],
-  inventory: Inventory | null,
-  spirits: SpiritCollection | null,
-): SaveData {
-  return {
-    version: SAVE_VERSION,
-    levelId: d.levelId,
-    checkpointId: d.checkpointId,
-    checkpointOrder: d.checkpointOrder,
-    secured: [...d.secured],
-    defeated: [...defeated],
-    inventory: inventory ? copyInventory(inventory) : null,
-    spirits: spirits ? copySpirits(spirits) : null,
-  };
-}
-
-export function parseSave(raw: string | null): SaveData | null {
+export function parseSave(raw: string | null, starter?: Inventory): SaveData | null {
   if (raw === null) return null;
   try {
-    return migrateSave(JSON.parse(raw));
+    return migrateSave(JSON.parse(raw), starter);
   } catch {
     return null;
   }
@@ -207,10 +276,10 @@ export function getStorage(): Storage | null {
   }
 }
 
-export function loadSave(storage: Pick<Storage, 'getItem'> | null): SaveData | null {
+export function loadSave(storage: Pick<Storage, 'getItem'> | null, starter?: Inventory): SaveData | null {
   if (!storage) return null;
   try {
-    return parseSave(storage.getItem(SAVE_KEY));
+    return parseSave(storage.getItem(SAVE_KEY), starter);
   } catch {
     return null;
   }

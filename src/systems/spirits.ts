@@ -257,6 +257,11 @@ export interface PlayerBonuses {
   /** Elements of equipped spirits. Weapons of these elements deal extra damage. */
   affinity: Element[];
   affinityDamage: number;
+  /** Weapon archetypes the player's class favours, and the extra damage they deal. */
+  archetypeAffinity: string[];
+  archetypeDamage: number;
+  /** Multiplies how fast weapons build statuses. */
+  statusBuildupMult: number;
 }
 
 export const NO_BONUSES: PlayerBonuses = {
@@ -268,6 +273,9 @@ export const NO_BONUSES: PlayerBonuses = {
   cooldownMult: 1,
   affinity: [],
   affinityDamage: 0,
+  archetypeAffinity: [],
+  archetypeDamage: 0,
+  statusBuildupMult: 1,
 };
 
 /** Sums the stats of all equipped spirits and turns them into perks. */
@@ -294,15 +302,24 @@ export function playerBonuses(collection: SpiritCollection, lookup: FamilyLookup
     cooldownMult: 1 - Math.min(p.maxCooldownReduction, total.focus * p.cooldownPerFocus),
     affinity: ELEMENT_ORDER.filter((element) => affinity.has(element)),
     affinityDamage: p.affinityDamage,
+    archetypeAffinity: [],
+    archetypeDamage: 0,
+    statusBuildupMult: 1,
   };
 }
 
 /** A weapon as it plays with the spirit bonuses applied. */
 export function applyBonuses(weapon: ResolvedWeapon, bonuses: PlayerBonuses): ResolvedWeapon {
   const matches = weapon.element !== 'kinetic' && bonuses.affinity.includes(weapon.element);
+  const favoured = bonuses.archetypeAffinity.includes(weapon.archetype);
   return {
     ...weapon,
-    damage: weapon.damage * bonuses.damageMult * (matches ? 1 + bonuses.affinityDamage : 1),
+    damage:
+      weapon.damage *
+      bonuses.damageMult *
+      (matches ? 1 + bonuses.affinityDamage : 1) *
+      (favoured ? 1 + bonuses.archetypeDamage : 1),
+    statusBuildup: weapon.statusBuildup * bonuses.statusBuildupMult,
     reloadMs: weapon.reloadMs * bonuses.reloadMult,
     critChance: Math.min(1, weapon.critChance + bonuses.critChanceAdd),
   };

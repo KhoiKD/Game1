@@ -1,0 +1,13 @@
+{
+  "xp": { "base": 30, "maxLevel": 30 },
+  "perLevel": { "damage": 0.02, "hpEvery": 5 },
+  "weaponPower": { "common": 5, "uncommon": 8, "rare": 12, "epic": 16, "legendary": 20 },
+  "tiers": [
+    { "tier": 1, "name": "Tier 1", "requiredPower": 0,  "enemyHpMult": 1,   "xpMult": 1 },
+    { "tier": 2, "name": "Tier 2", "requiredPower": 9,  "enemyHpMult": 1.6, "xpMult": 1.5 },
+    { "tier": 3, "name": "Tier 3", "requiredPower": 14, "enemyHpMult": 2.4, "xpMult": 2.2 }
+  ],
+  "stages": [
+    { "id": "level1", "name": "Thornway", "map": "level1", "blurb": "Overgrown causeway. Verdant and Volt creatures; an Ember boss at the end." }
+  ]
+}
