@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { displayScale } from '../art/render';
 import { artKeys, CHARACTER_CLASSES } from '../art/sprites';
 import { COYOTE_MS, JUMP_CUT_FACTOR, JUMP_SPEED, MOVE_SPEED } from '../config';
 import type { WeaponElement } from '../data/weaponData';
@@ -25,11 +26,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     super(scene, x, y, look, 0);
     this.look = look;
     this.play(`${look}-idle`);
+    // The texture holds more texels than world pixels; scale it to 32 x 64 in the world.
+    const scale = displayScale(look);
+    this.setScale(scale);
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
     const body = this.body as Phaser.Physics.Arcade.Body;
-    body.setSize(24, 60).setOffset(4, 4);
+    body.setSize(24 / scale, 60 / scale).setOffset(4 / scale, 4 / scale);
     this.setCollideWorldBounds(true);
 
     const keyboard = scene.input.keyboard;
@@ -44,13 +48,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       upArrow: 'UP',
     }) as Keys;
 
-    this.gun = scene.add.image(x, y, artKeys.weapon('pulse-rifle', 'kinetic')).setOrigin(0, 0.5).setDepth(5);
+    const gunKey = artKeys.weapon('pulse-rifle', 'kinetic');
+    this.gun = scene.add.image(x, y, gunKey).setOrigin(0, 0.5).setDepth(5).setScale(displayScale(gunKey));
   }
 
   /** Shows the weapon in hand: each archetype has its own sprite, coloured by element. */
   setWeapon(archetype: string, element: WeaponElement): void {
     const key = artKeys.weapon(archetype, element);
-    if (this.scene.textures.exists(key)) this.gun.setTexture(key);
+    if (this.scene.textures.exists(key)) this.gun.setTexture(key).setScale(displayScale(key));
   }
 
   /** Point the weapon fires from, in world coordinates. */

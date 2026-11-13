@@ -28,3 +28,11 @@ export const MUZZLE_OFFSET = 22;
 
 /** Distance between shots in a boss rain attack; wide enough to stand between them. */
 export const BOSS_RAIN_SPACING = 84;
+
+/**
+ * The canvas is drawn at this many times the logical GAME_WIDTH x GAME_HEIGHT
+ * view, so detailed art shows every texel. Small screens, where the extra
+ * pixels would be invisible, draw at 1x and save the fill-rate.
+ */
+export const RENDER_SCALE =
+  typeof window === 'undefined' || window.innerWidth * (window.devicePixelRatio || 1) >= 1400 ? 2 : 1;

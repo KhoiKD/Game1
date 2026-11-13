@@ -16,6 +16,7 @@ import { matchups } from '../systems/combat';
 import type { WeaponInstance } from '../systems/loot';
 import { ELEMENT_COLOR, css } from '../ui/elementColors';
 import { capitalize, rarityCss } from '../ui/rarity';
+import { useDetailCamera } from '../ui/detailCamera';
 
 export interface InventorySceneData {
   inventory: Inventory;
@@ -52,6 +53,7 @@ export class InventoryScene extends Phaser.Scene {
   }
 
   create(): void {
+    useDetailCamera(this);
     this.input.setDefaultCursor('default');
     const keyboard = this.input.keyboard;
     if (!keyboard) throw new Error('Keyboard input is unavailable');

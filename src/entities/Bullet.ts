@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { displayScale } from '../art/render';
 import { GRAVITY } from '../config';
 import { PLAIN_HIT, type HitProfile } from '../systems/combat';
 import type { Vec2 } from '../util/aim';
@@ -35,6 +36,8 @@ export class Bullet extends Phaser.Physics.Arcade.Image {
 
   fire(x: number, y: number, dir: Vec2, options: BulletOptions): void {
     if (options.texture) this.setTexture(options.texture);
+    const scale = displayScale(this.texture.key);
+    this.setScale(scale);
     this.enableBody(true, x, y, true, true);
 
     const gravity = options.gravity ?? 0;
@@ -42,7 +45,7 @@ export class Bullet extends Phaser.Physics.Arcade.Image {
     body.setAllowGravity(gravity > 0);
     // Body gravity adds to world gravity, so offset it to reach the wanted fraction.
     body.setGravityY(gravity > 0 ? GRAVITY * (gravity - 1) : 0);
-    const hitSize = Math.max(6, Math.min(this.width, this.height));
+    const hitSize = Math.max(6 / scale, Math.min(this.width, this.height));
     body.setSize(hitSize, hitSize);
 
     this.setRotation(Math.atan2(dir.y, dir.x));

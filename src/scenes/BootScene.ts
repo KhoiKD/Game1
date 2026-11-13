@@ -1,15 +1,14 @@
 import Phaser from 'phaser';
 import { ELEMENTS } from '../data/elementData';
 import { progression } from '../data/progressionData';
-import { RARITIES } from '../data/weaponData';
 import { ELEMENT_COLOR } from '../ui/elementColors';
+import { paintEffects } from '../art/effects';
 import { drawAllArt } from '../art/render';
 import { getSession } from '../state/session';
-import { RARITY_COLOR } from '../ui/rarity';
 
 /**
- * Loads the level assets and generates the remaining placeholder textures in
- * code (colored shapes). Real art replaces these later; see ASSETS.md.
+ * Loads the level assets and draws every texture: sprites (art/render.ts),
+ * effects (art/effects.ts), and fallback shapes for creatures without art.
  */
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -27,70 +26,8 @@ export class BootScene extends Phaser.Scene {
   create(): void {
     drawAllArt(this);
 
-    this.makeTexture('bullet', 10, 4, (g) => {
-      g.fillStyle(0xffd166).fillRect(0, 0, 10, 4);
-    });
-
-    // Projectiles, one per weapon archetype family (see "projectile" in weapons.json).
-    this.makeTexture('pellet', 6, 6, (g) => {
-      g.fillStyle(0xffb347).fillCircle(3, 3, 3);
-    });
-    this.makeTexture('beam', 26, 3, (g) => {
-      g.fillStyle(0xfff275).fillRect(0, 0, 26, 3);
-    });
-    this.makeTexture('grenade', 12, 12, (g) => {
-      g.fillStyle(0xe4572e).fillCircle(6, 6, 6);
-      g.fillStyle(0xffd166).fillCircle(6, 6, 2);
-    });
-    this.makeTexture('slash', 12, 28, (g) => {
-      g.fillStyle(0x7ef7a3).fillTriangle(0, 0, 12, 14, 0, 28);
-    });
-    this.makeTexture('charge-shot', 30, 12, (g) => {
-      g.fillStyle(0x4cc9f0).fillRect(0, 0, 30, 12);
-      g.fillStyle(0xe0fbff).fillRect(8, 3, 22, 6);
-    });
-
-    // Dropped weapons: a crate whose band shows the rarity.
-    for (const rarity of RARITIES) {
-      this.makeTexture(`loot-${rarity}`, 22, 18, (g) => {
-        g.fillStyle(0x1c2233).fillRect(0, 0, 22, 18);
-        g.fillStyle(RARITY_COLOR[rarity]).fillRect(0, 6, 22, 6);
-        g.lineStyle(2, RARITY_COLOR[rarity]).strokeRect(1, 1, 20, 16);
-      });
-    }
-
-    this.makeTexture('reticle', 24, 24, (g) => {
-      g.lineStyle(2, 0xffffff, 0.9);
-      g.strokeCircle(12, 12, 8);
-      g.lineBetween(12, 0, 12, 6);
-      g.lineBetween(12, 18, 12, 24);
-      g.lineBetween(0, 12, 6, 12);
-      g.lineBetween(18, 12, 24, 12);
-    });
-
-    // Checkpoint: pole with a flag. Grey when inactive, gold once reached.
-    for (const [key, pole, flag] of [
-      ['checkpoint-off', 0x586179, 0x7a8199],
-      ['checkpoint-on', 0xffe29a, 0xffd166],
-    ] as const) {
-      this.makeTexture(key, 32, 96, (g) => {
-        g.fillStyle(pole).fillRect(4, 0, 4, 96);
-        g.fillStyle(flag).fillTriangle(8, 4, 8, 28, 28, 16);
-      });
-    }
-
-    this.makeTexture('pickup', 16, 16, (g) => {
-      g.fillStyle(0x7ef7a3);
-      g.fillTriangle(8, 0, 16, 8, 8, 16);
-      g.fillTriangle(8, 0, 0, 8, 8, 16);
-    });
-
+    paintEffects(this);
     this.makeEnemyTextures();
-
-    this.makeTexture('enemy-bullet', 10, 10, (g) => {
-      g.fillStyle(0xff6b6b).fillCircle(5, 5, 5);
-      g.fillStyle(0xffe3e3).fillCircle(5, 5, 2);
-    });
 
     // New players pick a class first; a stage in progress resumes; otherwise the hub.
     const session = getSession();

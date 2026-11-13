@@ -5,6 +5,9 @@ import { classIds } from '../src/data/progressionData';
 import { ARCHETYPE_IDS, WEAPON_ELEMENTS } from '../src/data/weaponData';
 import { OUTLINE } from '../src/art/palette';
 import { gridProblems, gridSize, layer, mirror, rasterize, replaceRows, swapChars } from '../src/art/pixel';
+import { powerOfTwoAtMost, scale2x, shadeGrid } from '../src/art/shade';
+import { STAGE_THEMES, themeFor } from '../src/art/themes';
+import { DOWN, LEFT, RIGHT, TILE_COUNT, UP, VARIANTS, neighbourMask, paintTile, tileIndex } from '../src/art/tiles';
 import {
   BOSS_FAMILIES,
   CHARACTER_CLASSES,
@@ -143,4 +146,67 @@ describe('creatures', () => {
     expect(creatureArt('tide-axolotl', 'Tide')).toBeNull();
     expect(bossArt('tide-axolotl', 'Tide')).toBeNull();
   });
+});
+
+describe('detailed shading', () => {
+  it('doubles a grid with Scale2x, rounding diagonals', () => {
+    expect(scale2x(['ab'])).toEqual(['aabb', 'aabb']);
+    // A single diagonal step is filled in, so it reads as a slope rather than a stair.
+    expect(scale2x(['a.', 'aa'])[1]).toBe('aaa.');
+    expect(powerOfTwoAtMost(4)).toBe(4);
+    expect(powerOfTwoAtMost(10)).toBe(8);
+  });
+
+  it('keeps the old footprint at higher detail: (cells + 2) x detail texels', () => {
+    const art = characterArt('vanguard');
+    const { width, height } = gridSize(art.frames[0]!);
+    const image = shadeGrid(art.frames[0]!, { detail: 4, palette: art.palette, outline: OUTLINE });
+    expect(image.width).toBe((width + 2) * 4);
+    expect(image.height).toBe((height + 2) * 4);
+    expect(image.data.length).toBe(image.width * image.height * 4);
+  });
+
+  it('leaves the border clear, outlines the shape, and shades it', () => {
+    const image = shadeGrid(['aa', 'aa'], { detail: 4, palette: { a: '#808080' }, outline: OUTLINE });
+    const alpha = (x: number, y: number) => image.data[(y * image.width + x) * 4 + 3]!;
+    const red = (x: number, y: number) => image.data[(y * image.width + x) * 4]!;
+    expect(alpha(0, 0)).toBe(0);
+    expect(alpha(image.width - 1, image.height - 1)).toBe(0);
+    expect(alpha(3, 8)).toBe(255); // outline just outside the fill
+    // Lit from the upper left: that corner is brighter than the lower right.
+    expect(red(5, 5)).toBeGreaterThan(red(10, 10));
+  });
+
+  it('glows around emissive parts', () => {
+    const plain = shadeGrid(['a'], { detail: 4, palette: { a: '#ff0000' }, outline: OUTLINE });
+    const lit = shadeGrid(['a'], { detail: 4, palette: { a: '#ff0000' }, outline: OUTLINE, emissive: 'a' });
+    expect(lit.data[3]).toBeGreaterThan(plain.data[3]!);
+  });
+});
+
+describe('ground tiles', () => {
+  it('reads neighbours, treating the map edge as solid except above', () => {
+    const solid = (_x: number, y: number) => y === 1;
+    expect(neighbourMask(solid, 0, 1, 3, 3)).toBe(LEFT | RIGHT); // map edge to the left counts as solid
+    expect(neighbourMask(() => true, 1, 0, 3, 3)).toBe(LEFT | RIGHT | DOWN);
+  });
+
+  it('has a tile for every neighbour combination and variant', () => {
+    const indices = new Set<number>();
+    for (let mask = 0; mask < 16; mask++) for (let v = 0; v < VARIANTS; v++) indices.add(tileIndex(mask, v));
+    expect(indices.size).toBe(TILE_COUNT);
+    expect(Math.max(...indices)).toBe(TILE_COUNT - 1);
+  });
+
+  for (const stageId of Object.keys(STAGE_THEMES)) {
+    it(`${stageId}: rounds exposed corners and fills buried tiles`, () => {
+      const theme = themeFor(stageId);
+      const alphaAt = (data: Uint8ClampedArray, x: number, y: number) => data[(y * 64 + x) * 4 + 3]!;
+      const lone = paintTile(theme, 0, 0);
+      expect(alphaAt(lone, 0, 0)).toBe(0);
+      expect(alphaAt(lone, 32, 32)).toBe(255);
+      const buried = paintTile(theme, UP | RIGHT | DOWN | LEFT, 1);
+      expect(alphaAt(buried, 0, 0)).toBe(255);
+    });
+  }
 });

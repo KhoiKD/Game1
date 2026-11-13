@@ -8,6 +8,7 @@ import {
   MUZZLE_OFFSET,
   PLAYER_IFRAMES_MS,
   PLAYER_MAX_HP,
+  RENDER_SCALE,
 } from '../config';
 import { balance, creatureName, findFamily, getFamily } from '../data/creatureData';
 import { elementRules } from '../data/elementData';
@@ -15,7 +16,7 @@ import { getBossStats, getEnemyStats } from '../data/enemyData';
 import { resolveWeaponInstance, rollDropFor } from '../data/lootData';
 import { getNpc } from '../data/npcData';
 import { findClass, getStage, progression } from '../data/progressionData';
-import type { ResolvedWeapon } from '../data/weaponData';
+import type { ResolvedWeapon, WeaponElement } from '../data/weaponData';
 import { Boss } from '../entities/Boss';
 import { Charger } from '../entities/Charger';
 import { Flyer } from '../entities/Flyer';
@@ -90,6 +91,9 @@ import { capitalize } from '../ui/rarity';
 import { createRng, type Rng } from '../util/rng';
 import type { InventorySceneData } from './InventoryScene';
 import type { SpiritsSceneData } from './SpiritsScene';
+import { useDetailCamera } from '../ui/detailCamera';
+import { StageArt } from '../art/stageArt';
+import { displayScale } from '../art/render';
 
 const FALL_MARGIN = 96; // how far below the map the player may fall before dying
 const PLAYER_HALF_HEIGHT = 32;
@@ -171,6 +175,8 @@ export class LevelScene extends Phaser.Scene {
   private rng: Rng = createRng(1);
   private deathPending = false;
   private npcs: Npc[] = [];
+  /** Detailed ground, parallax backdrop, and shadows. */
+  private stageArt!: StageArt;
   private readonly pickupSprites = new Map<string, Phaser.GameObjects.Image>();
   private readonly checkpointSprites = new Map<string, Phaser.GameObjects.Image>();
   private toastText?: Phaser.GameObjects.Text;
@@ -216,12 +222,13 @@ export class LevelScene extends Phaser.Scene {
     const ground = map.createLayer('ground', tileset, 0, 0);
     if (!ground) throw new Error('Tile layer "ground" not found in level1');
     ground.setCollisionByExclusion([-1]);
+    this.stageArt = new StageArt(this, this.stageId, ground);
 
     this.mapHeightPx = map.heightInPixels;
     // Solid on the left, right, and top; open at the bottom so pits are fatal.
     this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels + FALL_MARGIN * 4);
     this.physics.world.setBoundsCollision(true, true, true, false);
-    const camera = this.cameras.main;
+    const camera = useDetailCamera(this);
     camera.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
 
     const rawObjects = (map.getObjectLayer('objects')?.objects ?? []) as unknown as RawObject[];
@@ -241,6 +248,8 @@ export class LevelScene extends Phaser.Scene {
     this.player = new Player(this, start.x, start.y, getSession().profile.classId);
     this.player.speedMult = this.bonuses.moveSpeedMult;
     this.physics.add.collider(this.player, ground);
+    this.stageArt.addShadow(this.player, 26);
+    for (const npc of this.npcs) this.stageArt.addShadow(npc, 26);
     this.syncWeaponLook();
     camera.startFollow(this.player, true, 0.12, 0.12);
     camera.centerOn(start.x, start.y);
@@ -291,7 +300,7 @@ export class LevelScene extends Phaser.Scene {
     // for abilities.
     this.input.setDefaultCursor('none');
     this.input.mouse?.disableContextMenu();
-    this.reticle = this.add.image(0, 0, 'reticle').setScrollFactor(0).setDepth(100);
+    this.reticle = this.add.image(0, 0, 'reticle').setScrollFactor(0).setDepth(100).setScale(displayScale('reticle'));
 
     const keyboard = this.input.keyboard;
     if (!keyboard) throw new Error('Keyboard input is unavailable');
@@ -336,7 +345,8 @@ export class LevelScene extends Phaser.Scene {
     pointer.updateWorldPoint(this.cameras.main);
     const target = { x: pointer.worldX, y: pointer.worldY };
 
-    this.reticle.setPosition(pointer.x, pointer.y);
+    this.reticle.setPosition(pointer.x / RENDER_SCALE, pointer.y / RENDER_SCALE);
+    this.stageArt.update();
     this.player.tick(time, target);
     // Blink while invulnerable so the i-frames are readable.
     this.player.setAlpha(isInvulnerable(this.health, time) && Math.floor(time / 80) % 2 === 0 ? 0.35 : 1);
@@ -386,11 +396,12 @@ export class LevelScene extends Phaser.Scene {
       const sprite = this.add
         .image(cp.rect.x + cp.rect.width / 2, cp.rect.y + cp.rect.height, 'checkpoint-off')
         .setOrigin(0.5, 1)
+        .setScale(displayScale('checkpoint-off'))
         .setDepth(1);
       this.checkpointSprites.set(cp.id, sprite);
     }
     for (const pickup of this.level.pickups) {
-      this.pickupSprites.set(pickup.id, this.add.image(pickup.x, pickup.y, 'pickup').setDepth(2));
+      this.pickupSprites.set(pickup.id, this.add.image(pickup.x, pickup.y, 'pickup').setDepth(2).setScale(displayScale('pickup')));
     }
     this.syncCheckpoints();
     this.syncPickups();
@@ -444,7 +455,9 @@ export class LevelScene extends Phaser.Scene {
     this.boss = null;
     for (const def of this.level.enemies) {
       if (isDefeated(this.run, def.id)) continue;
-      this.enemies.add(this.createEnemy(def));
+      const enemy = this.createEnemy(def);
+      this.enemies.add(enemy);
+      this.stageArt.addShadow(enemy);
     }
   }
 
@@ -555,7 +568,7 @@ export class LevelScene extends Phaser.Scene {
       );
       enemy.status = built.state;
       if (built.applied) {
-        this.floatText(enemy.x, enemy.y - enemy.height / 2 - 24, status.toUpperCase(), css(STATUS_COLOR[status]), 14);
+        this.floatText(enemy.x, enemy.y - enemy.displayHeight / 2 - 24, status.toUpperCase(), css(STATUS_COLOR[status]), 14);
       }
     }
 
@@ -596,7 +609,7 @@ export class LevelScene extends Phaser.Scene {
     if (result.effectiveness === 'weak') color = '#8b93a8';
     const text = `${amount}${result.crit ? '!' : ''}`;
     const x = enemy.x + (this.rng() * 2 - 1) * 12;
-    this.floatText(x, enemy.y - enemy.height / 2 - 8, text, result.crit ? '#fff275' : color, result.crit ? 16 : 13);
+    this.floatText(x, enemy.y - enemy.displayHeight / 2 - 8, text, result.crit ? '#fff275' : color, result.crit ? 16 : 13);
   }
 
   private floatText(x: number, y: number, text: string, color: string, size: number): void {
@@ -620,7 +633,7 @@ export class LevelScene extends Phaser.Scene {
     for (const child of [...this.enemies.getChildren()]) {
       const enemy = child as Enemy;
       if (!enemy.active) continue;
-      const reach = blastRadius + Math.max(enemy.width, enemy.height) / 2;
+      const reach = blastRadius + Math.max(enemy.displayWidth, enemy.displayHeight) / 2;
       if (Math.hypot(enemy.x - x, enemy.y - y) > reach) continue;
       this.hitEnemy(enemy, hit);
     }
@@ -637,7 +650,7 @@ export class LevelScene extends Phaser.Scene {
     const windowMs = isBoss ? balance.capture.bossWindowMs : balance.capture.windowMs[rarity];
     enemy.weaken(time, time + windowMs);
     if (isBoss) this.killAll(this.enemyBullets);
-    this.floatText(enemy.x, enemy.y - enemy.height / 2 - 24, 'WEAKENED', '#ffffff', 14);
+    this.floatText(enemy.x, enemy.y - enemy.displayHeight / 2 - 24, 'WEAKENED', '#ffffff', 14);
   }
 
   /** F: capture the nearest weakened creature in range. */
@@ -657,7 +670,7 @@ export class LevelScene extends Phaser.Scene {
     if (result.evolved) parts.push('it evolved');
     for (const element of result.slotsUnlocked) parts.push(`new ${element} slot`);
     this.toast(parts.join(' · '));
-    this.floatText(enemy.x, enemy.y - enemy.height / 2 - 24, 'CAPTURED', css(ELEMENT_COLOR[family.elements[0]!]), 16);
+    this.floatText(enemy.x, enemy.y - enemy.displayHeight / 2 - 24, 'CAPTURED', css(ELEMENT_COLOR[family.elements[0]!]), 16);
     // A captured creature leaves its spirit instead of loot.
     this.defeat(enemy, false);
   }
@@ -681,9 +694,9 @@ export class LevelScene extends Phaser.Scene {
     for (const child of this.enemies.getChildren()) {
       const enemy = child as Enemy;
       if (!enemy.active || !enemy.isWeakened) continue;
-      const width = Math.max(36, enemy.width);
+      const width = Math.max(36, enemy.displayWidth);
       const x = enemy.x - width / 2;
-      const y = enemy.y - enemy.height / 2 - 22;
+      const y = enemy.y - enemy.displayHeight / 2 - 22;
       this.captureGfx.fillStyle(0x2a3042).fillRect(x, y, width, 4);
       this.captureGfx.fillStyle(0xffffff).fillRect(x, y, width * enemy.captureWindowLeft(time), 4);
     }
@@ -696,7 +709,7 @@ export class LevelScene extends Phaser.Scene {
     this.capturePrompt
       .setText(inRange ? `F  capture ${creatureName(target.enemy.creature)}` : 'Get closer to capture')
       .setColor(inRange ? '#ffffff' : '#9aa4bf')
-      .setPosition(enemy.x, enemy.y - enemy.height / 2 - 38)
+      .setPosition(enemy.x, enemy.y - enemy.displayHeight / 2 - 38)
       .setVisible(true);
   }
 
@@ -779,7 +792,7 @@ export class LevelScene extends Phaser.Scene {
     const hit: HitProfile = { ...ABILITY_HIT, element: ability.element };
     const enemiesNear = (x: number, y: number, radius: number): Enemy[] =>
       ([...this.enemies.getChildren()] as Enemy[]).filter(
-        (enemy) => enemy.active && Math.hypot(enemy.x - x, enemy.y - y) <= radius + Math.max(enemy.width, enemy.height) / 2,
+        (enemy) => enemy.active && Math.hypot(enemy.x - x, enemy.y - y) <= radius + Math.max(enemy.displayWidth, enemy.displayHeight) / 2,
       );
     const flash = (x: number, y: number, radius: number): void => {
       const ring = this.add.graphics().setDepth(4);
@@ -805,7 +818,7 @@ export class LevelScene extends Phaser.Scene {
           speed: rules.bolt.speed,
           lifetimeMs: (rules.bolt.range / rules.bolt.speed) * 1000,
           pierce: rules.bolt.pierce,
-          texture: 'charge-shot',
+          texture: this.shotTexture('charge-shot', hit.element),
           hit: { ...hit, damage: ability.stats.power * rules.bolt.damagePerPower },
         });
         break;
@@ -1012,7 +1025,8 @@ export class LevelScene extends Phaser.Scene {
   private dropLoot(source: string, x: number, y: number): void {
     const instance = rollDropFor(source, this.rng);
     if (!instance) return;
-    const sprite = this.add.image(x, y, `loot-${instance.rarity}`).setDepth(2);
+    const key = `loot-${instance.rarity}`;
+    const sprite = this.add.image(x, y, key).setDepth(2).setScale(displayScale(key));
     this.tweens.add({ targets: sprite, y: y - 6, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     this.groundLoot.push({ sprite, instance, warnedFull: false });
   }
@@ -1142,6 +1156,12 @@ export class LevelScene extends Phaser.Scene {
     this.syncWeaponLook();
   }
 
+  /** Projectile textures come in every element's colours (see art/effects.ts). */
+  private shotTexture(base: string, element: WeaponElement | null): string {
+    const key = element && element !== 'kinetic' ? `${base}-${element}` : base;
+    return this.textures.exists(key) ? key : base;
+  }
+
   private spawnShot(origin: Vec2, aim: number, shot: Shot): void {
     const angle = aim + shot.angleOffset;
     const dir = { x: Math.cos(angle), y: Math.sin(angle) };
@@ -1154,7 +1174,7 @@ export class LevelScene extends Phaser.Scene {
       pierce: shot.pierce,
       gravity: shot.gravity,
       blastRadius: shot.blastRadius,
-      texture: shot.texture,
+      texture: this.shotTexture(shot.texture, shot.element),
       hit: {
         damage: shot.damage,
         element: shot.element,
@@ -1182,7 +1202,8 @@ export class LevelScene extends Phaser.Scene {
   }
 
   private buildHud(): void {
-    const style = { fontFamily: 'monospace', fontSize: '14px', color: '#9aa4bf' };
+    // A dark stroke keeps the HUD readable over bright backdrops.
+    const style = { fontFamily: 'monospace', fontSize: '14px', color: '#b4bdd6', stroke: '#10131c', strokeThickness: 3 };
     this.add
       .text(16, 12, 'A/D move · Space jump · Click fire · R reload · Q/E swap · F capture · Right click ability · I bag · C spirits', {
         ...style,

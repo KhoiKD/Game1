@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH } from '../config';
+import { displayScale } from '../art/render';
 import { artKeys } from '../art/sprites';
 import { classDefs, classIds } from '../data/progressionData';
 import { weaponData } from '../data/weaponData';
 import { getSession, saveSession, setProfile } from '../state/session';
+import { useDetailCamera } from '../ui/detailCamera';
 
 const FONT = 'monospace';
 const DIM = '#9aa4bf';
@@ -18,6 +20,7 @@ export class ClassSelectScene extends Phaser.Scene {
   }
 
   create(): void {
+    useDetailCamera(this);
     this.input.setDefaultCursor('default');
     const current = getSession().profile.classId;
     this.add.text(24, 20, 'CHOOSE A CLASS', { fontFamily: FONT, fontSize: '22px', color: BRIGHT });
@@ -37,7 +40,7 @@ export class ClassSelectScene extends Phaser.Scene {
 
       // The class character, idling in the corner of its panel.
       const look = artKeys.character(id);
-      this.add.sprite(x + COLUMN_WIDTH - 34, 140, look, 0).setScale(1.25).play(`${look}-idle`);
+      this.add.sprite(x + COLUMN_WIDTH - 34, 140, look, 0).setScale(1.25 * displayScale(look)).play(`${look}-idle`);
 
       let y = 108;
       const line = (text: string, color: string, size = 13, gap = 10): void => {

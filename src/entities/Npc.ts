@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { displayScale } from '../art/render';
 import { artKeys } from '../art/sprites';
 import type { NpcDef } from '../data/npcData';
 import type { Vec2 } from '../util/aim';
@@ -26,7 +27,7 @@ export class Npc extends Phaser.GameObjects.Sprite {
     private readonly lines: string[],
   ) {
     super(scene, x, y, artKeys.npc(npcId), 0);
-    this.setOrigin(0.5, 1).setDepth(2);
+    this.setOrigin(0.5, 1).setDepth(2).setScale(displayScale(artKeys.npc(npcId)));
     scene.add.existing(this);
     this.play(artKeys.npc(npcId));
     this.bubble = scene.add

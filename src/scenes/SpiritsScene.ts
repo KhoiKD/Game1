@@ -19,6 +19,7 @@ import {
 } from '../systems/spirits';
 import { ELEMENT_COLOR, css } from '../ui/elementColors';
 import { capitalize } from '../ui/rarity';
+import { useDetailCamera } from '../ui/detailCamera';
 
 export interface SpiritsSceneData {
   spirits: SpiritCollection;
@@ -57,6 +58,7 @@ export class SpiritsScene extends Phaser.Scene {
   }
 
   create(): void {
+    useDetailCamera(this);
     this.input.setDefaultCursor('default');
     const keyboard = this.input.keyboard;
     if (!keyboard) throw new Error('Keyboard input is unavailable');

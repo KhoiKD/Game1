@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { displayScale } from '../art/render';
 import { artKeys } from '../art/sprites';
 import type { CreatureRef } from '../data/creatureData';
 import { elementRules } from '../data/elementData';
@@ -91,7 +92,7 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.creature = stats.creature ?? null;
     this.dropTable = stats.dropTable;
     this.xp = stats.xp;
-    this.setScale(stats.size ?? 1);
+    this.setScale((stats.size ?? 1) * displayScale(texture));
     this.baseTexture = texture;
     this.maxHp = stats.hp;
     this.hp = stats.hp;
