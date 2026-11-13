@@ -11,7 +11,7 @@ export class Hopper extends Enemy {
   private airborne = false;
 
   constructor(scene: Phaser.Scene, def: EnemyDef, private readonly stats: HopperStats) {
-    super(scene, def, enemyTexture('hopper', stats.element), stats);
+    super(scene, def, enemyTexture('hopper', stats.element, scene, stats.creature.family), stats);
     this.homeX = def.x;
   }
 

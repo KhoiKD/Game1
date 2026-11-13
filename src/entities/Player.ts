@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
+import { artKeys, CHARACTER_CLASSES } from '../art/sprites';
 import { COYOTE_MS, JUMP_CUT_FACTOR, JUMP_SPEED, MOVE_SPEED } from '../config';
+import type { WeaponElement } from '../data/weaponData';
 import { aimAngle, type Vec2 } from '../util/aim';
 
 type Keys = Record<
@@ -15,9 +17,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   speedMult = 1;
   private dashUntil = 0;
   private dashVelocity = 0;
+  /** Texture key of the class character; its animations are this key plus -idle, -run, -jump. */
+  private readonly look: string;
 
-  constructor(scene: Phaser.Scene, x: number, y: number) {
-    super(scene, x, y, 'player');
+  constructor(scene: Phaser.Scene, x: number, y: number, classId: string | null) {
+    const look = artKeys.character(classId && CHARACTER_CLASSES.includes(classId) ? classId : 'vanguard');
+    super(scene, x, y, look, 0);
+    this.look = look;
+    this.play(`${look}-idle`);
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
@@ -37,7 +44,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       upArrow: 'UP',
     }) as Keys;
 
-    this.gun = scene.add.image(x, y, 'gun').setOrigin(0, 0.5).setDepth(5);
+    this.gun = scene.add.image(x, y, artKeys.weapon('pulse-rifle', 'kinetic')).setOrigin(0, 0.5).setDepth(5);
+  }
+
+  /** Shows the weapon in hand: each archetype has its own sprite, coloured by element. */
+  setWeapon(archetype: string, element: WeaponElement): void {
+    const key = artKeys.weapon(archetype, element);
+    if (this.scene.textures.exists(key)) this.gun.setTexture(key);
   }
 
   /** Point the weapon fires from, in world coordinates. */
@@ -105,5 +118,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const facingLeft = Math.cos(angle) < 0;
     this.setFlipX(facingLeft);
     this.gun.setPosition(pivot.x, pivot.y).setRotation(angle).setFlipY(facingLeft);
+
+    // Airborne: jump pose. Moving: run cycle. Otherwise: idle bob.
+    let anim = 'idle';
+    if (!body.blocked.down) anim = 'jump';
+    else if (Math.abs(body.velocity.x) > 10) anim = 'run';
+    this.play(`${this.look}-${anim}`, true);
   }
 }

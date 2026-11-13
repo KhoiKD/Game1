@@ -10,7 +10,7 @@ export class Turret extends Enemy {
   private firingAt: number | null = null;
 
   constructor(scene: Phaser.Scene, def: EnemyDef, private readonly stats: TurretStats) {
-    super(scene, def, enemyTexture('turret', stats.element), stats);
+    super(scene, def, enemyTexture('turret', stats.element, scene, stats.creature.family), stats);
     this.arcadeBody.setAllowGravity(false);
     this.arcadeBody.setImmovable(true);
   }

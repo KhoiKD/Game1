@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH } from '../config';
+import { artKeys } from '../art/sprites';
 import { classDefs, classIds } from '../data/progressionData';
 import { weaponData } from '../data/weaponData';
 import { getSession, saveSession, setProfile } from '../state/session';
@@ -29,10 +30,14 @@ export class ClassSelectScene extends Phaser.Scene {
     classIds.forEach((id, index) => {
       const def = classDefs[id]!;
       const x = 24 + index * (COLUMN_WIDTH + 12);
-      const wrap = { width: COLUMN_WIDTH - 24 };
+      const wrap = { width: COLUMN_WIDTH - 70 };
       const panel = this.add.graphics();
       panel.fillStyle(id === current ? 0x1c2233 : 0x141824).fillRect(x, 92, COLUMN_WIDTH, 380);
       panel.lineStyle(1, id === current ? 0x4cc9f0 : 0x2a3042).strokeRect(x, 92, COLUMN_WIDTH, 380);
+
+      // The class character, idling in the corner of its panel.
+      const look = artKeys.character(id);
+      this.add.sprite(x + COLUMN_WIDTH - 34, 140, look, 0).setScale(1.25).play(`${look}-idle`);
 
       let y = 108;
       const line = (text: string, color: string, size = 13, gap = 10): void => {

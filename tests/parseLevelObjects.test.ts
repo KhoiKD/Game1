@@ -91,6 +91,17 @@ describe('enemies and bosses', () => {
   });
 });
 
+describe('npcs', () => {
+  it('parses an npc with its id', () => {
+    const level = parseLevelObjects([spawn, { name: 'npc-wayfinder', type: 'npc', x: 272, y: 480, properties: [{ name: 'npc', value: 'wayfinder' }] }]);
+    expect(level.npcs).toEqual([{ id: 'npc-wayfinder', npc: 'wayfinder', x: 272, y: 480 }]);
+  });
+
+  it('throws when the npc property is missing', () => {
+    expect(() => parseLevelObjects([spawn, { name: 'n', type: 'npc', x: 0, y: 0 }])).toThrow(/npc/);
+  });
+});
+
 describe('checkpointTriggerZone', () => {
   const flag = { x: 1152, y: 384, width: 32, height: 96 };
 

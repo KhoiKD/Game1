@@ -13,6 +13,7 @@ import { balance, creatureName, findFamily, getFamily } from '../data/creatureDa
 import { elementRules } from '../data/elementData';
 import { getBossStats, getEnemyStats } from '../data/enemyData';
 import { resolveWeaponInstance, rollDropFor } from '../data/lootData';
+import { getNpc } from '../data/npcData';
 import { findClass, getStage, progression } from '../data/progressionData';
 import type { ResolvedWeapon } from '../data/weaponData';
 import { Boss } from '../entities/Boss';
@@ -22,6 +23,7 @@ import { Hopper } from '../entities/Hopper';
 import { Lobber } from '../entities/Lobber';
 import { Bullet } from '../entities/Bullet';
 import { Enemy, type EnemyContext } from '../entities/Enemy';
+import { Npc } from '../entities/Npc';
 import { Player } from '../entities/Player';
 import { Turret } from '../entities/Turret';
 import { Walker } from '../entities/Walker';
@@ -168,6 +170,7 @@ export class LevelScene extends Phaser.Scene {
   private pendingReload = false;
   private rng: Rng = createRng(1);
   private deathPending = false;
+  private npcs: Npc[] = [];
   private readonly pickupSprites = new Map<string, Phaser.GameObjects.Image>();
   private readonly checkpointSprites = new Map<string, Phaser.GameObjects.Image>();
   private toastText?: Phaser.GameObjects.Text;
@@ -229,11 +232,16 @@ export class LevelScene extends Phaser.Scene {
     this.rebuildLoadout(true);
     this.health = createHealth(PLAYER_MAX_HP + this.bonuses.maxHpBonus);
     this.spawnCheckpointsAndPickups();
+    this.npcs = this.level.npcs.map((placement) => {
+      const def = getNpc(placement.npc);
+      return new Npc(this, placement.x, placement.y, placement.npc, def, def.lines[this.stageId] ?? []);
+    });
 
     const start = this.respawnPoint();
-    this.player = new Player(this, start.x, start.y);
+    this.player = new Player(this, start.x, start.y, getSession().profile.classId);
     this.player.speedMult = this.bonuses.moveSpeedMult;
     this.physics.add.collider(this.player, ground);
+    this.syncWeaponLook();
     camera.startFollow(this.player, true, 0.12, 0.12);
     camera.centerOn(start.x, start.y);
 
@@ -342,6 +350,7 @@ export class LevelScene extends Phaser.Scene {
     this.checkCheckpoints();
     this.checkPickups();
     this.checkLoot();
+    for (const npc of this.npcs) npc.tick(time, { x: this.player.x, y: this.player.y });
     this.refreshBossBar();
     this.drawCapturePrompts(time);
     this.refreshSpiritHud(time);
@@ -1068,6 +1077,7 @@ export class LevelScene extends Phaser.Scene {
     const sameWeapon = currentUid === undefined ? -1 : this.weaponUids.indexOf(currentUid);
     this.weaponIndex = sameWeapon !== -1 ? sameWeapon : Math.min(this.weaponIndex, Math.max(0, this.weapons.length - 1));
     this.weaponHudText = '';
+    this.syncWeaponLook();
   }
 
   private openInventory(): void {
@@ -1112,6 +1122,13 @@ export class LevelScene extends Phaser.Scene {
     this.refreshWeaponHud(time);
   }
 
+  /** Shows the active weapon in the player's hand. */
+  private syncWeaponLook(): void {
+    const weapon = this.weapons[this.weaponIndex];
+    // On a restart the old, destroyed player lingers until create() makes a new one; skip it.
+    if (weapon && this.player?.scene) this.player.setWeapon(weapon.archetype, weapon.element);
+  }
+
   private swapWeapon(direction: 1 | -1, time: number): void {
     const count = this.weapons.length;
     if (count < 2) return;
@@ -1122,6 +1139,7 @@ export class LevelScene extends Phaser.Scene {
       this.weapons[this.weaponIndex]!,
       time,
     );
+    this.syncWeaponLook();
   }
 
   private spawnShot(origin: Vec2, aim: number, shot: Shot): void {

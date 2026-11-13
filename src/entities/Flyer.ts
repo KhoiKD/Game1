@@ -14,7 +14,7 @@ export class Flyer extends Enemy {
   private firingAt: number | null = null;
 
   constructor(scene: Phaser.Scene, def: EnemyDef, private readonly stats: FlyerStats) {
-    super(scene, def, enemyTexture('flyer', stats.element), stats);
+    super(scene, def, enemyTexture('flyer', stats.element, scene, stats.creature.family), stats);
     this.homeX = def.x;
     this.arcadeBody.setAllowGravity(false);
   }

@@ -25,7 +25,7 @@ export class Boss extends Enemy {
   private hopping = false;
 
   constructor(scene: Phaser.Scene, def: EnemyDef, private readonly stats: BossStats) {
-    super(scene, def, enemyTexture('boss', stats.element), stats);
+    super(scene, def, enemyTexture('boss', stats.element, scene, stats.family), stats);
     this.displayName = stats.name;
     this.homeX = def.x;
     this.arcadeBody.setCollideWorldBounds(true);

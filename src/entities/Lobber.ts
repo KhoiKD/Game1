@@ -10,7 +10,7 @@ export class Lobber extends Enemy {
   private firingAt: number | null = null;
 
   constructor(scene: Phaser.Scene, def: EnemyDef, private readonly stats: LobberStats) {
-    super(scene, def, enemyTexture('lobber', stats.element), stats);
+    super(scene, def, enemyTexture('lobber', stats.element, scene, stats.creature.family), stats);
   }
 
   protected act(ctx: EnemyContext): void {

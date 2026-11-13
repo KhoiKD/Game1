@@ -3,6 +3,7 @@ import { ELEMENTS } from '../data/elementData';
 import { progression } from '../data/progressionData';
 import { RARITIES } from '../data/weaponData';
 import { ELEMENT_COLOR } from '../ui/elementColors';
+import { drawAllArt } from '../art/render';
 import { getSession } from '../state/session';
 import { RARITY_COLOR } from '../ui/rarity';
 
@@ -24,14 +25,7 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.makeTexture('player', 32, 64, (g) => {
-      g.fillStyle(0x4cc9f0).fillRect(0, 0, 32, 64);
-      g.fillStyle(0x0b3954).fillRect(20, 10, 8, 8); // "eye" marks facing direction
-    });
-
-    this.makeTexture('gun', 22, 6, (g) => {
-      g.fillStyle(0xf1f5f9).fillRect(0, 0, 22, 6);
-    });
+    drawAllArt(this);
 
     this.makeTexture('bullet', 10, 4, (g) => {
       g.fillStyle(0xffd166).fillRect(0, 0, 10, 4);

@@ -5,6 +5,7 @@ import level3 from '../public/assets/levels/level3.json';
 import { getFamily, loreFor } from '../src/data/creatureData';
 import { ELEMENTS } from '../src/data/elementData';
 import { BEHAVIORS, behaviorOf, bossKinds, enemyKinds, getBossStats, getEnemyStats, parseKind } from '../src/data/enemyData';
+import { getNpc } from '../src/data/npcData';
 import { progression } from '../src/data/progressionData';
 import { ARCHETYPE_IDS, weaponData } from '../src/data/weaponData';
 import { parseLevelObjects, type RawObject } from '../src/level/parseLevelObjects';
@@ -155,8 +156,21 @@ describe('stages', () => {
         for (let x = boss.x - 320; x <= boss.x + 320; x += map.tilewidth) expect(solid(x, boss.y), `floor at ${x}`).toBe(true);
       });
 
+      it('has the wayfinder near the start, with something to say here', () => {
+        expect(level.npcs.map((n) => n.npc)).toEqual(['wayfinder']);
+        const npc = level.npcs[0]!;
+        expect(solid(npc.x, npc.y)).toBe(true);
+        expect(npc.x).toBeLessThan(level.checkpoints[0]!.rect.x);
+        expect(getNpc('wayfinder').lines[stage.id]?.length).toBeGreaterThan(0);
+      });
+
       it('gives every object a unique id', () => {
-        const ids = [...level.checkpoints.map((c) => c.id), ...level.pickups.map((p) => p.id), ...level.enemies.map((e) => e.id)];
+        const ids = [
+          ...level.checkpoints.map((c) => c.id),
+          ...level.pickups.map((p) => p.id),
+          ...level.enemies.map((e) => e.id),
+          ...level.npcs.map((n) => n.id),
+        ];
         expect(new Set(ids).size).toBe(ids.length);
       });
     });

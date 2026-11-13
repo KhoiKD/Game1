@@ -9,7 +9,7 @@ export class Walker extends Enemy {
   private direction: 1 | -1 = -1;
 
   constructor(scene: Phaser.Scene, def: EnemyDef, private readonly stats: WalkerStats) {
-    super(scene, def, enemyTexture('walker', stats.element), stats);
+    super(scene, def, enemyTexture('walker', stats.element, scene, stats.creature.family), stats);
     this.homeX = def.x;
   }
 

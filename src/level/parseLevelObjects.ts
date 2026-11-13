@@ -10,7 +10,9 @@
  *               property "kind" (a key under "enemies" in src/data/enemies.json)
  *   boss        point; x, y = floor surface; custom string property "kind"
  *               (a key under "bosses" in src/data/enemies.json)
- * Each checkpoint, pickup, enemy, and boss needs a unique name; it is used as its id.
+ *   npc         point; x, y = floor surface; custom string property "npc"
+ *               (a key in src/data/npcs.json)
+ * Each checkpoint, pickup, enemy, boss, and npc needs a unique name; it is used as its id.
  */
 export interface RawObject {
   name?: string;
@@ -49,11 +51,20 @@ export interface EnemyDef {
   boss: boolean;
 }
 
+export interface NpcPlacement {
+  id: string;
+  /** Key in npcs.json. */
+  npc: string;
+  x: number;
+  y: number;
+}
+
 export interface LevelObjects {
   spawn: { x: number; y: number };
   checkpoints: CheckpointDef[];
   pickups: PickupDef[];
   enemies: EnemyDef[];
+  npcs: NpcPlacement[];
 }
 
 export function parseLevelObjects(objects: readonly RawObject[]): LevelObjects {
@@ -61,6 +72,7 @@ export function parseLevelObjects(objects: readonly RawObject[]): LevelObjects {
   const checkpoints: CheckpointDef[] = [];
   const pickups: PickupDef[] = [];
   const enemies: EnemyDef[] = [];
+  const npcs: NpcPlacement[] = [];
   const seen = new Set<string>();
 
   const claimId = (obj: RawObject): string => {
@@ -103,6 +115,13 @@ export function parseLevelObjects(objects: readonly RawObject[]): LevelObjects {
         enemies.push({ id, kind, x: obj.x, y: obj.y, boss: obj.type === 'boss' });
         break;
       }
+      case 'npc': {
+        const id = claimId(obj);
+        const npc = property(obj, 'npc');
+        if (typeof npc !== 'string' || npc === '') throw new Error(`NPC "${id}" needs a string property "npc"`);
+        npcs.push({ id, npc, x: obj.x, y: obj.y });
+        break;
+      }
       default:
         break; // unknown types are ignored so the map can carry editor-only objects
     }
@@ -110,7 +129,7 @@ export function parseLevelObjects(objects: readonly RawObject[]): LevelObjects {
 
   if (!spawn) throw new Error('Level has no spawn object');
   checkpoints.sort((a, b) => a.order - b.order);
-  return { spawn, checkpoints, pickups, enemies };
+  return { spawn, checkpoints, pickups, enemies, npcs };
 }
 
 /**

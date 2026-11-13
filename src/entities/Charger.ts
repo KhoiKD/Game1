@@ -13,7 +13,7 @@ export class Charger extends Enemy {
   private stateUntil = 0;
 
   constructor(scene: Phaser.Scene, def: EnemyDef, private readonly stats: ChargerStats) {
-    super(scene, def, enemyTexture('charger', stats.element), stats);
+    super(scene, def, enemyTexture('charger', stats.element, scene, stats.creature.family), stats);
     this.homeX = def.x;
   }
 

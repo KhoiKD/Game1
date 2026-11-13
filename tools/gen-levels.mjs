@@ -22,6 +22,7 @@ const NEEDS_ROOM = new Set(['ember-fireant', 'ember-komodo', 'tide-bluewhale', '
  *   floorPickups columns with a pickup on the floor (platform ends get one automatically)
  *   enemies      [kind, col, row]; row is the surface it stands on, or the hover line for flyers
  *   boss         [kind, col]
+ *   npc          [npc id, col]: stands on the floor near the start
  */
 const LAYOUTS = {
   level1: {
@@ -36,6 +37,7 @@ const LAYOUTS = {
       ['ember-fireant', 126, FLOOR], ['volt-flytrap', 130, 10], ['verdant-oak', 138, FLOOR],
     ],
     boss: ['komodrake', 168],
+    npc: ['wayfinder', 8],
   },
   level2: {
     width: 200,
@@ -50,6 +52,7 @@ const LAYOUTS = {
       ['volt-firefly', 158, 8],
     ],
     boss: ['abyssalon', 186],
+    npc: ['wayfinder', 6],
   },
   level3: {
     width: 220,
@@ -64,6 +67,7 @@ const LAYOUTS = {
       ['umbra-hawkmoth@2', 142, 6], ['verdant-stickinsect@2', 160, FLOOR], ['ember-komodo@2', 172, FLOOR], ['volt-firefly@2', 176, 7],
     ],
     boss: ['atroposphinx', 206],
+    npc: ['wayfinder', 5],
   },
 };
 
@@ -120,6 +124,12 @@ function build(name, layout) {
   for (let c = bossCol - 12; c <= Math.min(W - 1, bossCol + 12); c++) if (!solid(c, FLOOR)) fail('the boss arena needs unbroken floor');
   if (bossCol - layout.checkpoints[layout.checkpoints.length - 1] < 18) fail('the last checkpoint is too close to the boss');
   point('boss-01', 'boss', bossCol * T + T / 2, FLOOR * T, kindProp(bossKind));
+
+  if (layout.npc) {
+    const [npcId, npcCol] = layout.npc;
+    if (!solid(npcCol, FLOOR)) fail(`npc ${npcId} at column ${npcCol} is not on the floor`);
+    point(`npc-${npcId}`, 'npc', npcCol * T + T / 2, FLOOR * T, [{ name: 'npc', type: 'string', value: npcId }]);
+  }
 
   return {
     compressionlevel: -1, height: H, width: W, tilewidth: T, tileheight: T, infinite: false,

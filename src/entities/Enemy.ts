@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { artKeys } from '../art/sprites';
 import type { CreatureRef } from '../data/creatureData';
 import { elementRules } from '../data/elementData';
 import type { EnemyDef } from '../level/parseLevelObjects';
@@ -27,8 +28,15 @@ export interface EnemyContext {
   fire(from: Vec2, dir: Vec2, speed: number, gravity?: number): void;
 }
 
-/** Texture key for an enemy shape in an element's colours (see BootScene). */
-export function enemyTexture(shape: string, element: Element | null): string {
+/**
+ * Texture for an enemy: its creature's pixel art when there is some, otherwise
+ * a plain shape in its element's colours (see BootScene).
+ */
+export function enemyTexture(shape: string, element: Element | null, scene?: Phaser.Scene, familyId?: string): string {
+  if (scene && familyId) {
+    const art = shape === 'boss' ? artKeys.boss(familyId) : artKeys.creature(familyId);
+    if (scene.textures.exists(art)) return art;
+  }
   return `enemy-${shape}-${element ?? 'none'}`;
 }
 
@@ -75,7 +83,8 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
     texture: string,
     stats: { hp: number; xp: number; contactDamage: number; element: Element | null; creature?: CreatureRef; dropTable: string; size?: number },
   ) {
-    super(scene, def.x, def.y, texture);
+    // Pixel-art textures hold several frames; start on the first rather than the whole sheet.
+    super(scene, def.x, def.y, texture, scene.textures.get(texture).has('0') ? 0 : undefined);
     this.enemyId = def.id;
     this.kind = def.kind;
     this.element = stats.element;
@@ -91,6 +100,7 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setDepth(3);
+    this.useLook(false);
     this.badge = scene.add.graphics().setDepth(4);
     this.refreshBadge(scene.time.now);
   }
@@ -110,7 +120,14 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   /** Shows or hides the telegraph look: every ranged or charging attack warns before it lands. */
   protected showWarning(on: boolean): void {
-    this.setTexture(on ? `${this.baseTexture}-warn` : this.baseTexture);
+    this.useLook(on);
+  }
+
+  /** Plays the idle animation, or its pale warning version; plain shapes just swap texture. */
+  private useLook(warn: boolean): void {
+    const key = warn ? `${this.baseTexture}-warn` : this.baseTexture;
+    if (this.scene.anims.exists(key)) this.play(key, true);
+    else this.setTexture(key);
   }
 
   /** True while the enemy sits at zero health waiting to be captured. */
@@ -135,7 +152,7 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.weakenedAt = time;
     this.weakenedEnd = until;
     this.flashUntil = 0;
-    this.setTexture(this.baseTexture);
+    this.useLook(false);
     this.setVelocityX(0);
   }
 

@@ -1,0 +1,25 @@
+{
+  "npcs": {
+    "wayfinder": {
+      "name": "Veska",
+      "title": "Wayfinder",
+      "lines": {
+        "level1": [
+          "Bring a creature to its knees, then press F beside it to take its spirit.",
+          "The flags bank what you carry. Fall before the next one and it is lost.",
+          "Tide quenches Ember. The old lizard at the road's end burns hot."
+        ],
+        "level2": [
+          "The shore is thick with Tide and Gale creatures, and Volt in the storms.",
+          "Umbra swallows Tide. Bring something dark for the whale.",
+          "When the sky rains shot, stand in the gaps."
+        ],
+        "level3": [
+          "Nothing in the hollow is young. Expect grown creatures from the first step.",
+          "Gale scatters Umbra. Bring a strong wind for the moth.",
+          "Its ring of shot turns each time it fires. Watch where the gap moves."
+        ]
+      }
+    }
+  }
+}
