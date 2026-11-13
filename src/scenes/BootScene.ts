@@ -28,6 +28,7 @@ export class BootScene extends Phaser.Scene {
     paintEffects(this);
     this.makeEnemyTextures();
 
+    document.getElementById('loading')?.remove();
     this.scene.start('Title');
   }
 

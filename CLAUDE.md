@@ -23,16 +23,17 @@ Web-based side-scrolling run-and-gun with creature lore and looter-shooter depth
 ```
 src/
   main.ts            # Phaser config/boot
-  scenes/            # Boot, ClassSelect, Hub, Level, Inventory, Spirits
+  scenes/            # Boot, Title, ClassSelect, Hub, Level, Inventory, Spirits, Pause
   state/             # session: the live profile and stage run, loaded from and written to the save
   entities/          # Player, Enemy (base) and behaviors, Boss, Npc, Bullet
-  art/               # sprite grids, palette, shading, tiles, stage backdrops, effects
+  art/               # sprite grids, palette, shading, tiles, stage backdrops, effects, particles
+  audio/             # synthesized sound recipes, music patterns, Web Audio engine, event-to-sound director
   systems/           # combat, loot, perks, elements, creatures, progression, save
   data/              # JSON: weapons, perks, creatures, enemies, levels, lore
   ui/                # HUD, menus, tooltips, shared display helpers (rarity colours)
   level/             # Tiled object-layer parsing (spawn, checkpoints, pickups)
-  util/              # rng (seedable), math, events
-tests/               # Vitest for systems/
+  util/              # rng (seedable), math, typed event bus, frame probe
+tests/               # Vitest for systems/; tests/e2e is the Playwright smoke test
 public/assets/       # sprites, audio, tilemaps
 ```
 Rules:
@@ -45,7 +46,7 @@ Rules:
 **Player**
 - Run, jump (variable height), crouch/prone, free aim toward the mouse pointer (360°), hold-to-fire or tap-to-fire per weapon.
 - Health bar (small pool), brief i-frames on hit, respawn at last checkpoint.
-- Controls: WASD/arrows to move, Space to jump, mouse to aim, left click to fire, right click for the spirit ability, Shift for the class ability, Q/E to swap weapon, R to reload, F to capture, I inventory, C spirits, Esc to the hub. No gamepad in v1.
+- Controls: WASD/arrows to move, Space to jump, mouse to aim, left click to fire, right click for the spirit ability, Shift for the class ability, Q/E to swap weapon, R to reload, F to capture, I inventory, C spirits, P pause, M mute, Esc to the hub. No gamepad in v1.
 - Aim reticle replaces the OS cursor in-game. Aim angle is computed from the player's weapon pivot to the pointer in world coordinates (account for camera scroll).
 - Single-player only. No online features, co-op, or leaderboards.
 
@@ -133,7 +134,7 @@ Rules:
 - **Classes** (`classes.json`): Vanguard (+1 health; spread gun and melee burst; Bulwark invulnerability), Skirmisher (speed and reload; sidearm and pulse rifle; Slipstream dash), Warden (status build-up and spirit cooldown; beam, charge cannon, launcher; Stasis Pulse slow). Every weapon archetype belongs to exactly one class (a test enforces this). Class can be changed in the hub; weapons, spirits, and level are shared across classes.
 - **Bonuses:** `withClassAndLevel` folds class and level into the spirit bonuses, and `applyBonuses` applies the result to each weapon. `LevelScene.refreshBonuses` is the one place that recomputes them.
 - **Hub** (`scenes/HubScene.ts`): character summary, stage and tier select (number keys: 1 to 3 for the first stage, 4 to 6 for the second, 7 to 9 for the third), inventory (I), spirits (C, always swappable here), class change (K). No shops or currency yet.
-- **Flow:** Boot goes to class select for a new player, to the stage in progress if there is one, otherwise the hub. In a stage, Esc returns to the hub: one press after the stage is cleared, two presses mid-stage, which abandons the stage and loses anything at risk.
+- **Flow:** Boot paints every texture and goes to the title screen (a click there also unlocks audio), which goes to class select for a new player, to the stage in progress if there is one, otherwise the hub. In a stage, Esc returns to the hub: one press after the stage is cleared, two presses mid-stage, which abandons the stage and loses anything at risk.
 - **Save** (`systems/save.ts`, version 5): `profile` (class, experience, inventory, spirits, highest tier cleared per stage) plus `run` (stage, tier, checkpoint, banked pickups and defeats), which is null in the hub or before the first checkpoint. Versions 1 to 4 migrate to a profile with no class and a tier 1 run. `state/session.ts` holds the live profile and run; scenes change them through `setProfile` and `setRun` and call `saveSession`.
 
 ## Milestones (build in vertical slices; commit after each)
@@ -146,7 +147,7 @@ Rules:
 7. (done) Spirit capture, equipped-spirit perks and abilities, evolution, stat balancing formula and simulation test. Creatures are weakened at zero health and captured with F; spirits give stat perks, elemental affinity, and a right-click ability; element slots unlock by attunement; the balance simulation covers all 150 creatures. Abilities are five generic effects chosen by role, not yet the unique ability each creature's text describes.
 8. (done) Classes, hub, progression, save/load. Three classes with a passive, favoured weapon archetypes, and a Shift ability; a hub for loadout, spirits, class, and stage select; player levels from experience; a Power score that unlocks harder tiers of a stage; saves split into a profile and the stage in progress. The hub is a menu, not a walkable area, and has no shops yet.
 9. (done) Content pass: 3 stages (Thornway, Brinemere, Duskhollow), 6 enemy behaviors, 3 bosses (Komodrake, Abyssalon, Atroposphinx), 22 weapons, and 12 creature families (36 creatures, each with a lore line) playable as enemies at all three evolution stages. Remaining 38 families can be added in batches by element: an entry in `enemies.json` `creatures`, lore lines, and placements in `tools/gen-levels.mjs`.
-10. Audio, polish, performance, deploy.
+10. (done) Audio, polish, performance, deploy. Synthesized sound effects and procedural music (no audio files), a title screen, a pause menu with volume and detail settings, particles, camera shake, hit-stop, a hurt vignette, pooled damage numbers, game time that keeps real speed on slow frames, auto quality for slow machines, a Playwright smoke test, and GitHub Pages deploys gated on all tests.
 
 ## Conventions
 - TypeScript strict; no `any` without a comment explaining why.
@@ -168,6 +169,12 @@ Rules:
 - Read clicks from `pointerdown` events for the same reason.
 - Overlay screens (inventory, spirits) are their own scene launched over the paused level; they hand their result back through an `onClose` callback. All inventory changes in the level go through `applyInventory`.
 
+## Audio and feedback
+- **No audio files.** Sound effects are recipes in `src/audio/synth.ts` (oscillator or noise voices with envelope, pitch sweep, filter; each element adds its own layer). Music is four-bar note patterns per stage, boss, and hub in `src/audio/tracks.ts`. Both are pure and tested (`tests/audio.test.ts`). `src/audio/engine.ts` renders them with Web Audio on Phaser's audio context, caps simultaneous voices, rate-limits repeats, and schedules music on the audio clock.
+- **Events, not calls.** Gameplay emits on `gameEvents` (`src/util/events.ts`): shots, hits, captures, defeats, hurt, checkpoints, loot, telegraphs, boss phases, `music`. `src/audio/director.ts` maps events to sounds; `src/art/particles.ts` (`StageFeedback`) maps them to sparks, rings, shake, hit-stop, and the hurt vignette. Listeners never change game state. A new sound is a recipe plus a line in the director.
+- **Settings** (`src/state/settings.ts`, own localStorage key, not part of the save): music and effects volume, mute (M anywhere), and detail: `auto` (default), `high`, `low`. Low drops the scenery backdrop layer and draws at 1x. Auto measures frame time on the title screen (and reloads at 1x if a 2x canvas is slow) and again in each stage (drops the scenery layer if slow).
+- **Timing:** Phaser's delta smoothing is off (`fps.smoothStep: false` in `main.ts`) because it clamps slow frames to 1/60 s and made the game run in slow motion; Arcade physics steps at a fixed 60 Hz, several steps per frame when needed. Below 10 fps the game slows rather than skipping ahead.
+
 ## Art Direction
 - **Look:** detailed 2D, like late-90s pre-rendered sprites: big-headed characters with smooth, rounded shading (light from the upper left, cool violet shadows, warm lights), specular highlights on metal, a rim light on the far edge, a thin dark outline (`#1b1426`), soft contact shadows, and a glow around element-coloured parts. Every design is original; the IP rules apply to art as much as names.
 - **Resolution:** scenes lay out in the logical 960 x 540 view; the canvas is `RENDER_SCALE` (2, or 1 on small screens) times larger and each scene's camera is zoomed to match with `useDetailCamera` (`src/ui/detailCamera.ts`), which also corrects Phaser's follow, centre, bounds, and culling maths for a top-left origin. Text is rasterised at the canvas resolution. Read the pointer as `pointer.worldX`, or `pointer.x / RENDER_SCALE` for screen-fixed UI.
@@ -187,7 +194,7 @@ Rules:
 - `npm run build` — production build
 - `npm test` — Vitest
 - `npm run typecheck` — TypeScript check
-- `npm run test:e2e` — Playwright smoke test (game boots, player moves, shot fires). Not set up yet.
+- `npm run test:e2e` — Playwright smoke test against the production build (title, class select, stage start, move, fire, no page errors). Also runs in the deploy workflow.
 - `npm run lint` — Not set up yet.
 
 ## Working Agreement for Claude
