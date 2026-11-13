@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { applySettings, playUiSound } from '../audio/director';
-import { getSettings, type Settings } from '../state/settings';
+import { QUALITIES, getSettings, type Settings } from '../state/settings';
 import { useDetailCamera } from '../ui/detailCamera';
 
 export interface PauseSceneData {
@@ -56,12 +56,19 @@ export class PauseScene extends Phaser.Scene {
     button(cx + 90, 222, '-', () => adjust('sfx', -STEP));
     button(cx + 130, 222, '+', () => adjust('sfx', STEP));
     button(cx + 90, 256, 'toggle', () => this.change({ muted: !getSettings().muted }));
+    const cycleDetail = (): void => {
+      const order = QUALITIES;
+      const next = order[(order.indexOf(getSettings().quality) + 1) % order.length]!;
+      // Choosing a level by hand clears what auto decided.
+      this.change({ quality: next, autoLowRes: false });
+    };
+    button(cx + 90, 290, 'change', cycleDetail);
 
-    button(cx - 150, 320, 'Resume (P)', () => this.close('resume'));
-    button(cx + 10, 320, 'Leave for the hub (H)', () => this.leave());
-    this.warning = this.add.text(cx, 372, '', { fontFamily: FONT, fontSize: '13px', color: '#ffd166' }).setOrigin(0.5);
+    button(cx - 150, 350, 'Resume (P)', () => this.close('resume'));
+    button(cx + 10, 350, 'Leave for the hub (H)', () => this.leave());
+    this.warning = this.add.text(cx, 400, '', { fontFamily: FONT, fontSize: '13px', color: '#ffd166' }).setOrigin(0.5);
     this.add
-      .text(cx, 420, '1 / 2 music · 3 / 4 effects · M mute', { fontFamily: FONT, fontSize: '12px', color: DIM })
+      .text(cx, 440, '1 / 2 music · 3 / 4 effects · 5 detail · M mute · a resolution change applies on the next load', { fontFamily: FONT, fontSize: '12px', color: DIM })
       .setOrigin(0.5);
 
     const keyboard = this.input.keyboard;
@@ -72,6 +79,7 @@ export class PauseScene extends Phaser.Scene {
     keyboard?.on('keydown-TWO', () => adjust('music', STEP));
     keyboard?.on('keydown-THREE', () => adjust('sfx', -STEP));
     keyboard?.on('keydown-FOUR', () => adjust('sfx', STEP));
+    keyboard?.on('keydown-FIVE', cycleDetail);
     // M is handled everywhere by the audio director; just show the new state.
     keyboard?.on('keydown-M', () => this.time.delayedCall(0, () => this.refresh()));
     this.refresh();
@@ -85,7 +93,10 @@ export class PauseScene extends Phaser.Scene {
   private refresh(): void {
     const s = getSettings();
     const pct = (v: number): string => `${Math.round(v * 100)}%`.padStart(4);
-    this.values.setText([`Music     ${pct(s.music)}`, `Effects   ${pct(s.sfx)}`, `Sound     ${s.muted ? 'off' : 'on'}`].join('\n'));
+    const detail = s.quality === 'auto' ? `auto (${s.autoLowRes ? 'low' : 'high'})` : s.quality;
+    this.values.setText(
+      [`Music     ${pct(s.music)}`, `Effects   ${pct(s.sfx)}`, `Sound     ${s.muted ? 'off' : 'on'}`, `Detail    ${detail}`].join('\n'),
+    );
   }
 
   private leave(): void {

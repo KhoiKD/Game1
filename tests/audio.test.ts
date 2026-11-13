@@ -3,7 +3,7 @@ import { SOUNDS, hitRecipe, lootRecipe, recipeLength, shotRecipe, type Recipe } 
 import { STEPS, TRACKS, midiToFreq, parsePattern } from '../src/audio/tracks';
 import { ARCHETYPE_IDS, RARITIES, WEAPON_ELEMENTS } from '../src/data/weaponData';
 import { progression } from '../src/data/progressionData';
-import { DEFAULT_SETTINGS, parseSettings } from '../src/state/settings';
+import { DEFAULT_SETTINGS, parseSettings, prefersLowRes } from '../src/state/settings';
 
 /** Short, audible, and never so loud that layered sounds clip. */
 function expectSafe(recipe: Recipe, label: string): void {
@@ -89,7 +89,10 @@ describe('settings', () => {
   it('falls back to defaults for missing or broken data and clamps volumes', () => {
     expect(parseSettings(null)).toEqual(DEFAULT_SETTINGS);
     expect(parseSettings('not json')).toEqual(DEFAULT_SETTINGS);
-    expect(parseSettings('{"music":2,"sfx":-1,"muted":true}')).toEqual({ music: 1, sfx: 0, muted: true });
+    expect(parseSettings('{"music":2,"sfx":-1,"muted":true,"quality":"ultra"}')).toEqual({ ...DEFAULT_SETTINGS, music: 1, sfx: 0, muted: true });
+    expect(prefersLowRes(parseSettings('{"quality":"low"}'))).toBe(true);
+    expect(prefersLowRes(parseSettings('{"autoLowRes":true}'))).toBe(true);
+    expect(prefersLowRes(parseSettings('{"quality":"high","autoLowRes":true}'))).toBe(false);
     expect(parseSettings('{"music":"loud"}').music).toBe(DEFAULT_SETTINGS.music);
   });
 });

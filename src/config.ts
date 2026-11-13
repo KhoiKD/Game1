@@ -1,3 +1,5 @@
+import { SETTINGS_KEY, parseSettings, prefersLowRes } from './state/settings';
+
 // Core tuning constants. Gameplay values that will grow (weapons, creatures,
 // balance) belong in src/data/*.json, not here.
 
@@ -34,5 +36,16 @@ export const BOSS_RAIN_SPACING = 84;
  * view, so detailed art shows every texel. Small screens, where the extra
  * pixels would be invisible, draw at 1x and save the fill-rate.
  */
-export const RENDER_SCALE =
-  typeof window === 'undefined' || window.innerWidth * (window.devicePixelRatio || 1) >= 1400 ? 2 : 1;
+export const RENDER_SCALE = chooseRenderScale();
+
+function chooseRenderScale(): number {
+  if (typeof window === 'undefined') return 2;
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(SETTINGS_KEY);
+  } catch {
+    // No storage: decide by screen size alone.
+  }
+  if (prefersLowRes(parseSettings(raw))) return 1;
+  return window.innerWidth * (window.devicePixelRatio || 1) >= 1400 ? 2 : 1;
+}

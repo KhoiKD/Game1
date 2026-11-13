@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_HEIGHT, GAME_WIDTH, RENDER_SCALE, TILE } from '../config';
+import { GAME_HEIGHT, RENDER_SCALE, TILE } from '../config';
 import { displayScale } from './render';
 import { paintTexture } from './effects';
 import { TILE_COUNT, cellVariant, neighbourMask, paintTile, tileIndex } from './tiles';
@@ -26,23 +26,38 @@ interface Shadowed {
   width: number;
 }
 
+const STAGE_TEXTURE = /^(tiles-detail|backdrop-far|backdrop-mid)-(.+)$/;
+
+/** Frees the ground and backdrop textures painted for other stages (they are repainted if needed). */
+export function releaseOtherStages(scene: Phaser.Scene, keepStageId: string): void {
+  for (const key of scene.textures.getTextureKeys()) {
+    const match = STAGE_TEXTURE.exec(key);
+    if (match && match[2] !== keepStageId) scene.textures.remove(key);
+  }
+}
+
 /** The sky and the two scrolling scenery layers behind a stage (also used on the title screen). */
 export class Backdrop {
   private readonly layers: ParallaxLayer[] = [];
 
   constructor(private readonly scene: Phaser.Scene, stageId: string) {
     const theme = themeFor(stageId);
-    const sky = `backdrop-sky-${stageId}`;
-    paintTexture(scene, sky, GAME_WIDTH, GAME_HEIGHT, (ctx) => paintSky(ctx, theme), 1);
-    scene.add.image(0, 0, sky).setOrigin(0, 0).setScrollFactor(0).setDepth(-30);
-
     const far = `backdrop-far-${stageId}`;
-    paintTexture(scene, far, BACKDROP_WIDTH, GAME_HEIGHT, (ctx) => paintFar(ctx, theme), 1);
+    paintTexture(scene, far, BACKDROP_WIDTH, GAME_HEIGHT, (ctx) => {
+      paintSky(ctx, theme);
+      paintFar(ctx, theme);
+    }, 1);
     this.addLayer(far, 0.12, -20, 1);
 
     const mid = `backdrop-mid-${stageId}`;
     paintTexture(scene, mid, BACKDROP_WIDTH, GAME_HEIGHT, (ctx) => paintMid(ctx, theme), RENDER_SCALE);
     this.addLayer(mid, 0.35, -10, RENDER_SCALE);
+  }
+
+  /** Low detail drops the scenery layer: one full-screen layer fewer for slow machines. */
+  setDetail(high: boolean): void {
+    const mid = this.layers[1];
+    for (const image of mid?.images ?? []) image.setVisible(high);
   }
 
   /** Positions the layers for a camera scrolled to `scrollX`. */
@@ -86,6 +101,10 @@ export class StageArt {
         this.shadowed.splice(i, 1);
       } else this.placeShadow(entry);
     }
+  }
+
+  setDetail(high: boolean): void {
+    this.backdrop.setDetail(high);
   }
 
   /** Gives a sprite a soft shadow on the ground beneath it. */
@@ -204,45 +223,51 @@ function wrapped(x: number, seed: number, draw: (x: number, random: () => number
   for (const dx of [-BACKDROP_WIDTH, 0, BACKDROP_WIDTH]) draw(x + dx, seeded(seed));
 }
 
+/**
+ * The sky, painted into the far layer so the backdrop costs one fewer
+ * full-screen layer to draw. Everything wraps at BACKDROP_WIDTH.
+ */
 function paintSky(ctx: CanvasRenderingContext2D, theme: StageTheme): void {
   const g = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
   g.addColorStop(0, theme.sky[0]);
   g.addColorStop(0.6, theme.sky[1]);
   g.addColorStop(1, theme.sky[2]);
   ctx.fillStyle = g;
-  ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+  ctx.fillRect(0, 0, BACKDROP_WIDTH, GAME_HEIGHT);
   const random = seeded(7);
   if (theme.stars) {
-    for (let i = 0; i < 140; i++) {
+    for (let i = 0; i < 150; i++) {
       ctx.fillStyle = `rgba(230, 220, 255, ${0.2 + random() * 0.6})`;
-      ctx.fillRect(random() * GAME_WIDTH, random() * GAME_HEIGHT * 0.7, 1, 1);
+      ctx.fillRect(random() * BACKDROP_WIDTH, random() * GAME_HEIGHT * 0.7, 1, 1);
     }
   }
   const { colour, y, radius } = theme.orb;
-  const ox = GAME_WIDTH * 0.72;
-  const oy = GAME_HEIGHT * y;
-  const halo = ctx.createRadialGradient(ox, oy, radius * 0.6, ox, oy, radius * 4);
-  halo.addColorStop(0, `${colour}aa`);
-  halo.addColorStop(1, `${colour}00`);
-  ctx.fillStyle = halo;
-  ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-  ctx.fillStyle = colour;
-  ctx.beginPath();
-  ctx.arc(ox, oy, radius, 0, Math.PI * 2);
-  ctx.fill();
+  wrapped(BACKDROP_WIDTH * 0.72, 1, (ox) => {
+    const oy = GAME_HEIGHT * y;
+    const halo = ctx.createRadialGradient(ox, oy, radius * 0.6, ox, oy, radius * 4);
+    halo.addColorStop(0, `${colour}aa`);
+    halo.addColorStop(1, `${colour}00`);
+    ctx.fillStyle = halo;
+    ctx.fillRect(ox - radius * 4, oy - radius * 4, radius * 8, radius * 8);
+    ctx.fillStyle = colour;
+    ctx.beginPath();
+    ctx.arc(ox, oy, radius, 0, Math.PI * 2);
+    ctx.fill();
+  });
   if (!theme.stars) {
     // Soft cloud banks.
-    for (let i = 0; i < 9; i++) {
-      const cx = random() * GAME_WIDTH;
-      const cy = 40 + random() * GAME_HEIGHT * 0.4;
-      for (let j = 0; j < 5; j++) {
-        const r = 18 + random() * 30;
-        const puff = ctx.createRadialGradient(cx + j * 22, cy, 0, cx + j * 22, cy, r);
-        puff.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
-        puff.addColorStop(1, 'rgba(255, 255, 255, 0)');
-        ctx.fillStyle = puff;
-        ctx.fillRect(cx + j * 22 - r, cy - r, r * 2, r * 2);
-      }
+    for (let i = 0; i < 10; i++) {
+      wrapped(random() * BACKDROP_WIDTH, 500 + i, (cx, rand) => {
+        const cy = 40 + rand() * GAME_HEIGHT * 0.4;
+        for (let j = 0; j < 5; j++) {
+          const r = 18 + rand() * 30;
+          const puff = ctx.createRadialGradient(cx + j * 22, cy, 0, cx + j * 22, cy, r);
+          puff.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
+          puff.addColorStop(1, 'rgba(255, 255, 255, 0)');
+          ctx.fillStyle = puff;
+          ctx.fillRect(cx + j * 22 - r, cy - r, r * 2, r * 2);
+        }
+      });
     }
   }
 }

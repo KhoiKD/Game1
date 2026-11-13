@@ -21,6 +21,11 @@ const game = new Phaser.Game({
   height: GAME_HEIGHT * RENDER_SCALE,
   backgroundColor: '#10131c',
   roundPixels: true,
+  // Raw frame deltas: Phaser's smoothing clamps slow frames to 1/60 s, which
+  // made the whole game run in slow motion on slow machines. Arcade physics
+  // still steps at a fixed 60 Hz, several steps per frame when needed.
+  fps: { smoothStep: false, min: 10 },
+  render: { powerPreference: 'high-performance' },
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,

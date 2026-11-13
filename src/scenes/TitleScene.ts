@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
-import { GAME_HEIGHT, GAME_WIDTH } from '../config';
+import { GAME_HEIGHT, GAME_WIDTH, RENDER_SCALE } from '../config';
 import { Backdrop } from '../art/stageArt';
-import { playUiSound } from '../audio/director';
+import { applySettings, playUiSound } from '../audio/director';
+import { getSettings } from '../state/settings';
+import { FrameProbe, SLOW_FRAME_MS } from '../util/frameProbe';
 import { getSession } from '../state/session';
 import { useDetailCamera } from '../ui/detailCamera';
 import { gameEvents } from '../util/events';
@@ -13,6 +15,8 @@ import { gameEvents } from '../util/events';
 export class TitleScene extends Phaser.Scene {
   private backdrop: Backdrop | null = null;
   private started = false;
+  /** Auto quality: if the title screen already runs slow at 2x, reload at 1x before play starts. */
+  private probe = new FrameProbe(1000, 1500);
 
   constructor() {
     super('Title');
@@ -21,6 +25,7 @@ export class TitleScene extends Phaser.Scene {
   create(): void {
     useDetailCamera(this);
     this.started = false;
+    this.probe = new FrameProbe(1000, 1500);
     this.input.setDefaultCursor('default');
     this.backdrop = new Backdrop(this, 'level1');
     this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x0b0d16, 0.35).setOrigin(0, 0);
@@ -70,13 +75,21 @@ export class TitleScene extends Phaser.Scene {
     });
   }
 
-  update(time: number): void {
+  update(time: number, delta: number): void {
     this.backdrop?.scrollTo(time * 0.03);
+    const average = this.probe.sample(time, delta);
+    if (average === null || average <= SLOW_FRAME_MS) return;
+    const settings = getSettings();
+    if (settings.quality !== 'auto' || settings.autoLowRes) return;
+    applySettings({ ...settings, autoLowRes: true });
+    // Nothing is in progress on the title screen, so reloading loses nothing.
+    if (RENDER_SCALE > 1) window.location.reload();
   }
 
   private start(): void {
     if (this.started) return;
     this.started = true;
+    this.probe.stop();
     playUiSound('click');
     const session = getSession();
     const next = (): void => {

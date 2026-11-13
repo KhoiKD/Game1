@@ -92,12 +92,18 @@ import { createRng, type Rng } from '../util/rng';
 import type { InventorySceneData } from './InventoryScene';
 import type { SpiritsSceneData } from './SpiritsScene';
 import { useDetailCamera } from '../ui/detailCamera';
-import { StageArt } from '../art/stageArt';
+import { StageArt, releaseOtherStages } from '../art/stageArt';
 import { displayScale } from '../art/render';
 import { gameEvents } from '../util/events';
 import { StageFeedback } from '../art/particles';
 import { FloatingText } from '../ui/floatingText';
 import type { PauseSceneData } from './PauseScene';
+import { applySettings } from '../audio/director';
+import { getSettings } from '../state/settings';
+import { FrameProbe, SLOW_FRAME_MS } from '../util/frameProbe';
+
+const FRAME_PROBE_WARMUP_MS = 2000;
+const FRAME_PROBE_SAMPLE_MS = 2000;
 
 const FALL_MARGIN = 96; // how far below the map the player may fall before dying
 const PLAYER_HALF_HEIGHT = 32;
@@ -185,6 +191,8 @@ export class LevelScene extends Phaser.Scene {
   private stageArt!: StageArt;
   /** Particles, shake, and other hit feedback. */
   private feedback!: StageFeedback;
+  /** Auto quality measures frame time once per stage visit. */
+  private frameProbe = new FrameProbe(FRAME_PROBE_WARMUP_MS, FRAME_PROBE_SAMPLE_MS);
   private floating!: FloatingText;
   private readonly pickupSprites = new Map<string, Phaser.GameObjects.Image>();
   private readonly checkpointSprites = new Map<string, Phaser.GameObjects.Image>();
@@ -233,7 +241,10 @@ export class LevelScene extends Phaser.Scene {
     const ground = map.createLayer('ground', tileset, 0, 0);
     if (!ground) throw new Error('Tile layer "ground" not found in level1');
     ground.setCollisionByExclusion([-1]);
+    releaseOtherStages(this, this.stageId);
     this.stageArt = new StageArt(this, this.stageId, ground);
+    this.frameProbe = new FrameProbe(FRAME_PROBE_WARMUP_MS, FRAME_PROBE_SAMPLE_MS);
+    this.applyDetail();
 
     this.mapHeightPx = map.heightInPixels;
     // Solid on the left, right, and top; open at the bottom so pits are fatal.
@@ -348,7 +359,7 @@ export class LevelScene extends Phaser.Scene {
     });
   }
 
-  update(time: number): void {
+  update(time: number, delta: number): void {
     if (this.deathPending) {
       this.deathPending = false;
       this.handleDeath();
@@ -363,6 +374,7 @@ export class LevelScene extends Phaser.Scene {
     this.reticle.setPosition(pointer.x / RENDER_SCALE, pointer.y / RENDER_SCALE);
     this.stageArt.update();
     this.feedback.update(time);
+    this.probeFrameRate(time, delta);
     this.player.tick(time, target);
     // Blink while invulnerable so the i-frames are readable.
     this.player.setAlpha(isInvulnerable(this.health, time) && Math.floor(time / 80) % 2 === 0 ? 0.35 : 1);
@@ -1135,6 +1147,26 @@ export class LevelScene extends Phaser.Scene {
     this.syncWeaponLook();
   }
 
+  /** Backdrop detail from the settings (see Settings.quality). */
+  private applyDetail(): void {
+    const s = getSettings();
+    this.stageArt.setDetail(s.quality === 'high' || (s.quality === 'auto' && !s.autoLowRes));
+  }
+
+  /**
+   * Auto quality: after a short warm-up, average the frame time; if frames run
+   * slow, drop the scenery layer now and draw at 1x from the next load.
+   */
+  private probeFrameRate(time: number, delta: number): void {
+    const average = this.frameProbe.sample(time, delta);
+    if (average === null) return;
+    const settings = getSettings();
+    if (settings.quality !== 'auto' || settings.autoLowRes || average <= SLOW_FRAME_MS) return;
+    applySettings({ ...settings, autoLowRes: true });
+    this.applyDetail();
+    this.toast('Lowered detail for smoother play · change it in the pause menu (P)');
+  }
+
   private openPause(): void {
     if (this.scene.isActive('Inventory') || this.scene.isActive('Spirits') || this.scene.isActive('Pause')) return;
     const data: PauseSceneData = {
@@ -1146,6 +1178,7 @@ export class LevelScene extends Phaser.Scene {
           return;
         }
         this.input.setDefaultCursor('none');
+        this.applyDetail();
         this.pendingSwap = 0;
         this.pendingReload = false;
         this.pendingFire = false;
