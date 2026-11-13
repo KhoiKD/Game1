@@ -12,6 +12,7 @@ import { rarityCss } from '../ui/rarity';
 import type { InventorySceneData } from './InventoryScene';
 import type { SpiritsSceneData } from './SpiritsScene';
 import { useDetailCamera } from '../ui/detailCamera';
+import { gameEvents } from '../util/events';
 
 const FONT = 'monospace';
 const DIM = '#9aa4bf';
@@ -33,6 +34,7 @@ export class HubScene extends Phaser.Scene {
 
   create(): void {
     useDetailCamera(this);
+    gameEvents.emit('music', { track: 'hub' });
     this.input.setDefaultCursor('default');
     this.message = '';
     const keyboard = this.input.keyboard;

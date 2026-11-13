@@ -26,8 +26,43 @@ interface Shadowed {
   width: number;
 }
 
-export class StageArt {
+/** The sky and the two scrolling scenery layers behind a stage (also used on the title screen). */
+export class Backdrop {
   private readonly layers: ParallaxLayer[] = [];
+
+  constructor(private readonly scene: Phaser.Scene, stageId: string) {
+    const theme = themeFor(stageId);
+    const sky = `backdrop-sky-${stageId}`;
+    paintTexture(scene, sky, GAME_WIDTH, GAME_HEIGHT, (ctx) => paintSky(ctx, theme), 1);
+    scene.add.image(0, 0, sky).setOrigin(0, 0).setScrollFactor(0).setDepth(-30);
+
+    const far = `backdrop-far-${stageId}`;
+    paintTexture(scene, far, BACKDROP_WIDTH, GAME_HEIGHT, (ctx) => paintFar(ctx, theme), 1);
+    this.addLayer(far, 0.12, -20, 1);
+
+    const mid = `backdrop-mid-${stageId}`;
+    paintTexture(scene, mid, BACKDROP_WIDTH, GAME_HEIGHT, (ctx) => paintMid(ctx, theme), RENDER_SCALE);
+    this.addLayer(mid, 0.35, -10, RENDER_SCALE);
+  }
+
+  /** Positions the layers for a camera scrolled to `scrollX`. */
+  scrollTo(scrollX: number): void {
+    for (const { images, factor } of this.layers) {
+      const offset = ((scrollX * factor) % BACKDROP_WIDTH + BACKDROP_WIDTH) % BACKDROP_WIDTH;
+      images[0].x = -offset;
+      images[1].x = BACKDROP_WIDTH - offset;
+    }
+  }
+
+  private addLayer(key: string, factor: number, depth: number, texelsPerPixel: number): void {
+    const make = (): Phaser.GameObjects.Image =>
+      this.scene.add.image(0, 0, key).setOrigin(0, 0).setScrollFactor(0).setDepth(depth).setScale(1 / texelsPerPixel);
+    this.layers.push({ images: [make(), make()], factor });
+  }
+}
+
+export class StageArt {
+  private readonly backdrop: Backdrop;
   private readonly shadowed: Shadowed[] = [];
 
   constructor(
@@ -37,17 +72,12 @@ export class StageArt {
   ) {
     const theme = themeFor(stageId);
     this.buildTiles(stageId, theme);
-    this.buildBackdrop(stageId, theme);
+    this.backdrop = new Backdrop(scene, stageId);
   }
 
   /** Moves the backdrop with the camera and keeps shadows on the floor. Call every frame. */
   update(): void {
-    const camera = this.scene.cameras.main;
-    for (const { images, factor } of this.layers) {
-      const offset = ((camera.scrollX * factor) % BACKDROP_WIDTH + BACKDROP_WIDTH) % BACKDROP_WIDTH;
-      images[0].x = -offset;
-      images[1].x = BACKDROP_WIDTH - offset;
-    }
+    this.backdrop.scrollTo(this.scene.cameras.main.scrollX);
     for (let i = this.shadowed.length - 1; i >= 0; i--) {
       const entry = this.shadowed[i]!;
       if (!entry.target.scene) {
@@ -133,28 +163,6 @@ export class StageArt {
     if (!visual) throw new Error('Could not create the detailed ground layer');
     visual.setScale(1 / RENDER_SCALE).setDepth(0.4);
     this.ground.setVisible(false);
-  }
-
-  // ---- backdrop ------------------------------------------------------------
-
-  private buildBackdrop(stageId: string, theme: StageTheme): void {
-    const sky = `backdrop-sky-${stageId}`;
-    paintTexture(this.scene, sky, GAME_WIDTH, GAME_HEIGHT, (ctx) => paintSky(ctx, theme), 1);
-    this.scene.add.image(0, 0, sky).setOrigin(0, 0).setScrollFactor(0).setDepth(-30);
-
-    const far = `backdrop-far-${stageId}`;
-    paintTexture(this.scene, far, BACKDROP_WIDTH, GAME_HEIGHT, (ctx) => paintFar(ctx, theme), 1);
-    this.addLayer(far, 0.12, -20, 1);
-
-    const mid = `backdrop-mid-${stageId}`;
-    paintTexture(this.scene, mid, BACKDROP_WIDTH, GAME_HEIGHT, (ctx) => paintMid(ctx, theme), RENDER_SCALE);
-    this.addLayer(mid, 0.35, -10, RENDER_SCALE);
-  }
-
-  private addLayer(key: string, factor: number, depth: number, texelsPerPixel: number): void {
-    const make = (): Phaser.GameObjects.Image =>
-      this.scene.add.image(0, 0, key).setOrigin(0, 0).setScrollFactor(0).setDepth(depth).setScale(1 / texelsPerPixel);
-    this.layers.push({ images: [make(), make()], factor });
   }
 }
 

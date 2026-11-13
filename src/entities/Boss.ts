@@ -40,6 +40,10 @@ export class Boss extends Enemy {
     return this.awake;
   }
 
+  protected override get isBoss(): boolean {
+    return true;
+  }
+
   /** 1-based phase number, for the HUD. */
   get phaseNumber(): number {
     return phaseIndex(this.hpFraction, this.stats.phases) + 1;

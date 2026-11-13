@@ -94,6 +94,7 @@ import type { SpiritsSceneData } from './SpiritsScene';
 import { useDetailCamera } from '../ui/detailCamera';
 import { StageArt } from '../art/stageArt';
 import { displayScale } from '../art/render';
+import { gameEvents } from '../util/events';
 
 const FALL_MARGIN = 96; // how far below the map the player may fall before dying
 const PLAYER_HALF_HEIGHT = 32;
@@ -175,6 +176,8 @@ export class LevelScene extends Phaser.Scene {
   private rng: Rng = createRng(1);
   private deathPending = false;
   private npcs: Npc[] = [];
+  /** Boss phase last announced; 0 before the fight starts. */
+  private bossPhaseShown = 0;
   /** Detailed ground, parallax backdrop, and shadows. */
   private stageArt!: StageArt;
   private readonly pickupSprites = new Map<string, Phaser.GameObjects.Image>();
@@ -215,6 +218,8 @@ export class LevelScene extends Phaser.Scene {
     this.pendingSwap = 0;
     this.pendingReload = false;
     this.rng = createRng(Date.now());
+    this.bossPhaseShown = 0;
+    gameEvents.emit('music', { track: this.stageId });
 
     const map = this.make.tilemap({ key: getStage(this.stageId).map });
     const tileset = map.addTilesetImage('tiles', 'tiles');
@@ -433,6 +438,7 @@ export class LevelScene extends Phaser.Scene {
       this.syncCheckpoints();
       this.refreshHud();
       this.toast(banked > 0 ? `Checkpoint reached · ${banked} secured` : 'Checkpoint reached');
+      gameEvents.emit('checkpoint', { x: this.player.x, y: this.player.y });
     }
   }
 
@@ -443,6 +449,7 @@ export class LevelScene extends Phaser.Scene {
       if (!Phaser.Geom.Intersects.RectangleToRectangle(bounds, sprite.getBounds())) continue;
       this.run = collectPickup(this.run, id);
       sprite.setVisible(false);
+      gameEvents.emit('pickup', { x: sprite.x, y: sprite.y });
       this.refreshHud();
     }
   }
@@ -554,6 +561,10 @@ export class LevelScene extends Phaser.Scene {
     );
     const defeated = enemy.takeDamage(result.amount, time);
     this.showDamage(enemy, result);
+    if (options.crit) {
+      const effect = result.effectiveness === 'weak' ? 'resisted' : result.effectiveness;
+      gameEvents.emit('enemyHit', { x: enemy.x, y: enemy.y, element: hit.element, crit: result.crit, effect });
+    }
 
     // An enemy is immune to the status of its own element.
     const status = statusFor(hit.element, elementRules);
@@ -637,6 +648,7 @@ export class LevelScene extends Phaser.Scene {
       if (Math.hypot(enemy.x - x, enemy.y - y) > reach) continue;
       this.hitEnemy(enemy, hit);
     }
+    gameEvents.emit('explosion', { x, y, radius: blastRadius, element: hit.element });
     const flash = this.add.graphics().setDepth(4);
     flash.fillStyle(0xffb347, 0.55).fillCircle(x, y, blastRadius);
     this.tweens.add({ targets: flash, alpha: 0, duration: 180, onComplete: () => flash.destroy() });
@@ -651,6 +663,7 @@ export class LevelScene extends Phaser.Scene {
     enemy.weaken(time, time + windowMs);
     if (isBoss) this.killAll(this.enemyBullets);
     this.floatText(enemy.x, enemy.y - enemy.displayHeight / 2 - 24, 'WEAKENED', '#ffffff', 14);
+    gameEvents.emit('weakened', { x: enemy.x, y: enemy.y, boss: isBoss });
   }
 
   /** F: capture the nearest weakened creature in range. */
@@ -671,6 +684,7 @@ export class LevelScene extends Phaser.Scene {
     for (const element of result.slotsUnlocked) parts.push(`new ${element} slot`);
     this.toast(parts.join(' · '));
     this.floatText(enemy.x, enemy.y - enemy.displayHeight / 2 - 24, 'CAPTURED', css(ELEMENT_COLOR[family.elements[0]!]), 16);
+    gameEvents.emit('captured', { x: enemy.x, y: enemy.y, element: family.elements[0]!, boss: enemy === this.boss });
     // A captured creature leaves its spirit instead of loot.
     this.defeat(enemy, false);
   }
@@ -787,6 +801,7 @@ export class LevelScene extends Phaser.Scene {
     const ability = this.ability;
     if (!ability || time < this.abilityReadyAt) return;
     this.abilityReadyAt = time + ability.cooldownMs;
+    gameEvents.emit('ability', { x: this.player.x, y: this.player.y, kind: ability.effect });
     const rules = balance.abilities;
     const color = ELEMENT_COLOR[ability.element];
     const hit: HitProfile = { ...ABILITY_HIT, element: ability.element };
@@ -879,6 +894,7 @@ export class LevelScene extends Phaser.Scene {
     if (!def || time < this.classReadyAt) return;
     const ability = def.ability;
     this.classReadyAt = time + ability.cooldownMs;
+    gameEvents.emit('ability', { x: this.player.x, y: this.player.y, kind: ability.effect });
     const guard = (durationMs: number): void => {
       this.health = { ...this.health, invulnerableUntil: Math.max(this.health.invulnerableUntil, time + durationMs) };
     };
@@ -957,6 +973,7 @@ export class LevelScene extends Phaser.Scene {
   }
 
   private defeat(enemy: Enemy, dropLoot = true): void {
+    if (dropLoot) gameEvents.emit('defeated', { x: enemy.x, y: enemy.y, element: enemy.element, boss: enemy === this.boss });
     this.run = defeatEnemy(this.run, enemy.enemyId);
     if (dropLoot) this.dropLoot(enemy.dropTable, enemy.x, enemy.y);
     this.grantKillXp();
@@ -971,6 +988,8 @@ export class LevelScene extends Phaser.Scene {
       this.killAll(this.enemyBullets);
       this.refreshHud();
       this.showStageClear(name);
+      gameEvents.emit('stageClear', { x: enemy.x, y: enemy.y });
+      gameEvents.emit('music', { track: this.stageId });
     }
     enemy.destroy();
   }
@@ -982,11 +1001,15 @@ export class LevelScene extends Phaser.Scene {
     if (!result.applied) return;
     this.health = result.health;
     this.refreshHud();
+    gameEvents.emit('playerHurt', { x: this.player.x, y: this.player.y, hpLeft: this.health.hp });
     // Deferred to the next update so the physics step finishes before the level resets.
     if (result.dead) this.deathPending = true;
   }
 
   private handleDeath(): void {
+    gameEvents.emit('playerDied', { x: this.player.x, y: this.player.y });
+    gameEvents.emit('music', { track: this.stageId });
+    this.bossPhaseShown = 0;
     const lost = unsecuredCount(this.run);
     this.run = die(this.run);
     this.refreshBonuses(true);
@@ -1043,6 +1066,7 @@ export class LevelScene extends Phaser.Scene {
         continue;
       }
       this.applyInventory(next);
+      gameEvents.emit('lootPickup', { x: loot.sprite.x, y: loot.sprite.y, rarity: loot.instance.rarity });
       this.removeGroundLoot(loot);
       const weapon = resolveWeaponInstance(loot.instance);
       this.toast(`Picked up ${capitalize(loot.instance.rarity)} ${weapon.name}`);
@@ -1121,6 +1145,7 @@ export class LevelScene extends Phaser.Scene {
     this.pendingReload = false;
 
     const weapon = this.weapons[this.weaponIndex]!;
+    const wasReloading = isReloading(this.weaponStates[this.weaponIndex]!);
     const step = stepWeapon(
       this.weaponStates[this.weaponIndex]!,
       weapon,
@@ -1128,9 +1153,11 @@ export class LevelScene extends Phaser.Scene {
       this.rng,
     );
     this.weaponStates[this.weaponIndex] = step.state;
+    if (!wasReloading && isReloading(step.state)) gameEvents.emit('reload', { x: this.player.x, y: this.player.y });
     if (step.shots.length > 0) {
       const origin = this.player.weaponPivot;
       const aim = aimAngle(origin, target);
+      gameEvents.emit('shot', { x: origin.x, y: origin.y, archetype: weapon.archetype, element: step.shots[0]!.element });
       for (const shot of step.shots) this.spawnShot(origin, aim, shot);
     }
     this.refreshWeaponHud(time);
@@ -1154,6 +1181,7 @@ export class LevelScene extends Phaser.Scene {
       time,
     );
     this.syncWeaponLook();
+    gameEvents.emit('swap', { x: this.player.x, y: this.player.y });
   }
 
   /** Projectile textures come in every element's colours (see art/effects.ts). */
@@ -1268,6 +1296,12 @@ export class LevelScene extends Phaser.Scene {
     if (boss.isWeakened) {
       this.bossLabel.setText(`${boss.displayName} · WEAKENED · press F beside it to capture`);
       return;
+    }
+    if (this.bossPhaseShown !== boss.phaseNumber) {
+      // The fight starts (or moves to a new phase): music and a roar.
+      if (this.bossPhaseShown === 0) gameEvents.emit('music', { track: 'boss' });
+      else gameEvents.emit('bossPhase', { x: boss.x, y: boss.y, phase: boss.phaseNumber });
+      this.bossPhaseShown = boss.phaseNumber;
     }
     const statuses = activeStatuses(boss.status, this.time.now).map((s) => s.toUpperCase());
     this.bossLabel.setText([`${boss.displayName} · Phase ${boss.phaseNumber}`, ...statuses].join(' · '));

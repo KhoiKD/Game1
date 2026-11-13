@@ -1,11 +1,13 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH } from '../config';
 import { displayScale } from '../art/render';
+import { playUiSound } from '../audio/director';
 import { artKeys } from '../art/sprites';
 import { classDefs, classIds } from '../data/progressionData';
 import { weaponData } from '../data/weaponData';
 import { getSession, saveSession, setProfile } from '../state/session';
 import { useDetailCamera } from '../ui/detailCamera';
+import { gameEvents } from '../util/events';
 
 const FONT = 'monospace';
 const DIM = '#9aa4bf';
@@ -21,6 +23,7 @@ export class ClassSelectScene extends Phaser.Scene {
 
   create(): void {
     useDetailCamera(this);
+    gameEvents.emit('music', { track: 'hub' });
     this.input.setDefaultCursor('default');
     const current = getSession().profile.classId;
     this.add.text(24, 20, 'CHOOSE A CLASS', { fontFamily: FONT, fontSize: '22px', color: BRIGHT });
@@ -79,6 +82,7 @@ export class ClassSelectScene extends Phaser.Scene {
   }
 
   private choose(classId: string): void {
+    playUiSound('click');
     const session = getSession();
     setProfile({ ...session.profile, classId });
     saveSession();

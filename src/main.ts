@@ -6,6 +6,8 @@ import { HubScene } from './scenes/HubScene';
 import { InventoryScene } from './scenes/InventoryScene';
 import { LevelScene } from './scenes/LevelScene';
 import { SpiritsScene } from './scenes/SpiritsScene';
+import { TitleScene } from './scenes/TitleScene';
+import { installAudio } from './audio/director';
 import { sharpenText } from './ui/detailCamera';
 
 sharpenText();
@@ -29,8 +31,9 @@ const game = new Phaser.Game({
       debug: false,
     },
   },
-  scene: [BootScene, ClassSelectScene, HubScene, LevelScene, InventoryScene, SpiritsScene],
+  scene: [BootScene, TitleScene, ClassSelectScene, HubScene, LevelScene, InventoryScene, SpiritsScene],
 });
 
 // Handle for the browser console and automated smoke tests.
 (window as unknown as { __tamerunner?: Phaser.Game }).__tamerunner = game;
+installAudio(game);

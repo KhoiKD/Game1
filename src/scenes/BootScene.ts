@@ -4,7 +4,6 @@ import { progression } from '../data/progressionData';
 import { ELEMENT_COLOR } from '../ui/elementColors';
 import { paintEffects } from '../art/effects';
 import { drawAllArt } from '../art/render';
-import { getSession } from '../state/session';
 
 /**
  * Loads the level assets and draws every texture: sprites (art/render.ts),
@@ -29,11 +28,7 @@ export class BootScene extends Phaser.Scene {
     paintEffects(this);
     this.makeEnemyTextures();
 
-    // New players pick a class first; a stage in progress resumes; otherwise the hub.
-    const session = getSession();
-    if (!session.profile.classId) this.scene.start('ClassSelect');
-    else if (session.run) this.scene.start('Level', { stageId: session.run.stageId, tier: session.run.tier });
-    else this.scene.start('Hub');
+    this.scene.start('Title');
   }
 
   /**

@@ -17,6 +17,7 @@ import {
 } from '../systems/status';
 import { ELEMENT_COLOR, STATUS_COLOR } from '../ui/elementColors';
 import type { Vec2 } from '../util/aim';
+import { gameEvents } from '../util/events';
 import type { Rng } from '../util/rng';
 
 /** What an enemy can see and do each frame. */
@@ -106,6 +107,11 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.refreshBadge(scene.time.now);
   }
 
+  /** Bosses telegraph with a deeper sound. */
+  protected get isBoss(): boolean {
+    return false;
+  }
+
   get arcadeBody(): Phaser.Physics.Arcade.Body {
     return this.body as Phaser.Physics.Arcade.Body;
   }
@@ -121,6 +127,7 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   /** Shows or hides the telegraph look: every ranged or charging attack warns before it lands. */
   protected showWarning(on: boolean): void {
+    if (on) gameEvents.emit('telegraph', { x: this.x, y: this.y, boss: this.isBoss });
     this.useLook(on);
   }
 
