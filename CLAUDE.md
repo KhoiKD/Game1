@@ -17,7 +17,7 @@ Web-based side-scrolling run-and-gun with creature lore and looter-shooter depth
 - Phaser 4 (Arcade Physics), TypeScript (strict), Vite. Check Phaser 4 docs before relying on Phaser 3 patterns from memory.
 - Tiled for levels (JSON export), Vitest for unit tests, Playwright for smoke tests
 - Persistence: localStorage (versioned save schema)
-- Deploy: static build to Netlify or GitHub Pages
+- Deploy: GitHub Pages at https://khoikd.github.io/Game1/. `.github/workflows/deploy.yml` typechecks, tests, builds, and publishes on every push to main.
 
 ## Architecture
 ```
