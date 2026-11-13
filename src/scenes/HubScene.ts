@@ -33,7 +33,7 @@ export class HubScene extends Phaser.Scene {
   }
 
   create(): void {
-    useDetailCamera(this);
+    useDetailCamera(this).fadeIn(250, 0, 0, 0);
     gameEvents.emit('music', { track: 'hub' });
     this.input.setDefaultCursor('default');
     this.message = '';

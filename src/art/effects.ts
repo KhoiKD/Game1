@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { RENDER_SCALE } from '../config';
+import { GAME_HEIGHT, GAME_WIDTH, RENDER_SCALE } from '../config';
 import { RARITIES, WEAPON_ELEMENTS, type WeaponElement } from '../data/weaponData';
 import { RARITY_COLOR } from '../ui/rarity';
 import { ELEMENT_RAMPS, OUTLINE } from './palette';
@@ -251,6 +251,31 @@ export function paintEffects(scene: Phaser.Scene): void {
     ctx.closePath();
     ctx.stroke();
   });
+
+  // Particles: a soft white spark (tinted per element) and a thin ring.
+  paintTexture(scene, 'spark', 8, 8, (ctx) => glowBlob(ctx, 4, 4, 4, [[0, '#ffffff'], [0.35, '#ffffffcc'], [1, '#ffffff00']]));
+  paintTexture(scene, 'ring', 64, 64, (ctx) => {
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(32, 32, 29, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+  // Screen-edge red glow shown when the player is hurt.
+  paintTexture(
+    scene,
+    'vignette',
+    GAME_WIDTH,
+    GAME_HEIGHT,
+    (ctx) => {
+      const g = ctx.createRadialGradient(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_HEIGHT * 0.35, GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH * 0.62);
+      g.addColorStop(0, 'rgba(200, 20, 40, 0)');
+      g.addColorStop(1, 'rgba(200, 20, 40, 0.85)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    },
+    0.5,
+  );
 
   // Soft contact shadow under feet.
   paintTexture(scene, 'shadow', 32, 10, (ctx) => {

@@ -160,6 +160,10 @@ export const SOUNDS = {
     { wave: 'noise', freq: 0, attack: 0.001, decay: 0.04, gain: 0.22, delay: 0.12, filter: { type: 'bandpass', freq: 1700, q: 3 } },
   ],
   swap: [{ wave: 'noise', freq: 0, attack: 0.001, decay: 0.05, gain: 0.18, filter: { type: 'bandpass', freq: 3000, freqEnd: 1500, q: 2 } }],
+  heartbeat: [
+    { wave: 'sine', freq: 70, freqEnd: 45, attack: 0.005, decay: 0.12, gain: 0.45 },
+    { wave: 'sine', freq: 65, freqEnd: 42, attack: 0.005, decay: 0.14, gain: 0.35, delay: 0.18 },
+  ],
   click: [{ wave: 'square', freq: 990, attack: 0.001, decay: 0.03, gain: 0.08, filter: { type: 'lowpass', freq: 3000 } }],
 } satisfies Record<string, Recipe>;
 

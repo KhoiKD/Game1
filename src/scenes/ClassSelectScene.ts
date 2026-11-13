@@ -22,7 +22,7 @@ export class ClassSelectScene extends Phaser.Scene {
   }
 
   create(): void {
-    useDetailCamera(this);
+    useDetailCamera(this).fadeIn(250, 0, 0, 0);
     gameEvents.emit('music', { track: 'hub' });
     this.input.setDefaultCursor('default');
     const current = getSession().profile.classId;

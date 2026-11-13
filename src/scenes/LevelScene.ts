@@ -95,6 +95,9 @@ import { useDetailCamera } from '../ui/detailCamera';
 import { StageArt } from '../art/stageArt';
 import { displayScale } from '../art/render';
 import { gameEvents } from '../util/events';
+import { StageFeedback } from '../art/particles';
+import { FloatingText } from '../ui/floatingText';
+import type { PauseSceneData } from './PauseScene';
 
 const FALL_MARGIN = 96; // how far below the map the player may fall before dying
 const PLAYER_HALF_HEIGHT = 32;
@@ -180,6 +183,9 @@ export class LevelScene extends Phaser.Scene {
   private bossPhaseShown = 0;
   /** Detailed ground, parallax backdrop, and shadows. */
   private stageArt!: StageArt;
+  /** Particles, shake, and other hit feedback. */
+  private feedback!: StageFeedback;
+  private floating!: FloatingText;
   private readonly pickupSprites = new Map<string, Phaser.GameObjects.Image>();
   private readonly checkpointSprites = new Map<string, Phaser.GameObjects.Image>();
   private toastText?: Phaser.GameObjects.Text;
@@ -306,6 +312,9 @@ export class LevelScene extends Phaser.Scene {
     this.input.setDefaultCursor('none');
     this.input.mouse?.disableContextMenu();
     this.reticle = this.add.image(0, 0, 'reticle').setScrollFactor(0).setDepth(100).setScale(displayScale('reticle'));
+    this.floating = new FloatingText(this);
+    this.feedback = new StageFeedback(this, this.player, this.reticle);
+    this.cameras.main.fadeIn(300, 0, 0, 0);
 
     const keyboard = this.input.keyboard;
     if (!keyboard) throw new Error('Keyboard input is unavailable');
@@ -332,6 +341,7 @@ export class LevelScene extends Phaser.Scene {
 
     onPress('SHIFT', () => this.useClassAbility());
     onPress('ESC', () => this.requestLeave());
+    onPress('P', () => this.openPause());
     onPress('F9', () => {
       resetSession();
       this.scene.start('Boot');
@@ -352,6 +362,7 @@ export class LevelScene extends Phaser.Scene {
 
     this.reticle.setPosition(pointer.x / RENDER_SCALE, pointer.y / RENDER_SCALE);
     this.stageArt.update();
+    this.feedback.update(time);
     this.player.tick(time, target);
     // Blink while invulnerable so the i-frames are readable.
     this.player.setAlpha(isInvulnerable(this.health, time) && Math.floor(time / 80) % 2 === 0 ? 0.35 : 1);
@@ -624,11 +635,7 @@ export class LevelScene extends Phaser.Scene {
   }
 
   private floatText(x: number, y: number, text: string, color: string, size: number): void {
-    const label = this.add
-      .text(x, y, text, { fontFamily: 'monospace', fontSize: `${size}px`, color, stroke: '#000000', strokeThickness: 3 })
-      .setOrigin(0.5)
-      .setDepth(50);
-    this.tweens.add({ targets: label, y: y - 26, alpha: 0, duration: 520, onComplete: () => label.destroy() });
+    this.floating.show(x, y, text, color, size);
   }
 
   private drawArc(from: Enemy, to: Enemy): void {
@@ -713,6 +720,10 @@ export class LevelScene extends Phaser.Scene {
       const y = enemy.y - enemy.displayHeight / 2 - 22;
       this.captureGfx.fillStyle(0x2a3042).fillRect(x, y, width, 4);
       this.captureGfx.fillStyle(0xffffff).fillRect(x, y, width * enemy.captureWindowLeft(time), 4);
+      // A ring that closes in as the capture window runs out.
+      const left = enemy.captureWindowLeft(time);
+      const radius = Math.max(enemy.displayWidth, enemy.displayHeight) / 2 + 6 + left * 14;
+      this.captureGfx.lineStyle(2, 0xffffff, 0.35 + 0.5 * (1 - left)).strokeCircle(enemy.x, enemy.y, radius);
     }
     const target = this.captureTarget();
     if (!target || !target.enemy.creature) {
@@ -905,6 +916,7 @@ export class LevelScene extends Phaser.Scene {
       case 'dash': {
         const direction = this.player.moveDirection || this.player.facing;
         this.player.dash(direction, ability.speed ?? 0, ability.durationMs ?? 0, time);
+        this.feedback.puff(this.player.x, this.player.y + 30);
         guard((ability.durationMs ?? 0) + 100);
         break;
       }
@@ -934,6 +946,11 @@ export class LevelScene extends Phaser.Scene {
       this.toast('Press Esc again to leave for the hub · anything at risk is lost');
       return;
     }
+    this.leaveToHub();
+  }
+
+  /** Back to the hub; mid-stage, anything not secured at a checkpoint is lost. */
+  private leaveToHub(): void {
     if (!this.stageCleared) this.run = die(this.run);
     setProfile(profileFromRun(getSession().profile, this.run));
     setRun(null);
@@ -1116,6 +1133,27 @@ export class LevelScene extends Phaser.Scene {
     this.weaponIndex = sameWeapon !== -1 ? sameWeapon : Math.min(this.weaponIndex, Math.max(0, this.weapons.length - 1));
     this.weaponHudText = '';
     this.syncWeaponLook();
+  }
+
+  private openPause(): void {
+    if (this.scene.isActive('Inventory') || this.scene.isActive('Spirits') || this.scene.isActive('Pause')) return;
+    const data: PauseSceneData = {
+      atRisk: !this.stageCleared,
+      onClose: (choice) => {
+        if (choice === 'hub') {
+          this.scene.resume();
+          this.leaveToHub();
+          return;
+        }
+        this.input.setDefaultCursor('none');
+        this.pendingSwap = 0;
+        this.pendingReload = false;
+        this.pendingFire = false;
+        this.scene.resume();
+      },
+    };
+    this.scene.launch('Pause', data);
+    this.scene.pause();
   }
 
   private openInventory(): void {
